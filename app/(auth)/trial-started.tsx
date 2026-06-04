@@ -1,0 +1,86 @@
+import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
+import React from 'react';
+import { Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Button } from '../../src/components/ui';
+import { useAuth } from '../../src/context/AuthContext';
+import { TRIAL_DAYS } from '../../src/data/plans';
+import { fullTimestamp } from '../../src/lib/time';
+import { useTheme } from '../../src/theme/ThemeContext';
+
+export default function TrialStarted() {
+  const { colors, font } = useTheme();
+  const router = useRouter();
+  const { subscription } = useAuth();
+
+  return (
+    <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
+      <View style={{ flex: 1, paddingHorizontal: 28, alignItems: 'center', justifyContent: 'center' }}>
+        <View
+          style={{
+            width: 110,
+            height: 110,
+            borderRadius: 55,
+            backgroundColor: colors.successSoft,
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <Ionicons name="checkmark-circle" size={68} color={colors.success} />
+        </View>
+
+        <Text
+          style={{
+            color: colors.text,
+            fontSize: font.size.huge,
+            fontWeight: font.weight.heavy,
+            textAlign: 'center',
+            marginTop: 28,
+          }}
+        >
+          7-day free trial{'\n'}started 🎉
+        </Text>
+
+        <Text
+          style={{
+            color: colors.textMuted,
+            fontSize: font.size.lg,
+            textAlign: 'center',
+            marginTop: 14,
+            lineHeight: 26,
+            maxWidth: 320,
+          }}
+        >
+          You now have full access to {TRIAL_DAYS} days of automatic comment moderation. We won't
+          charge you a cent until your trial ends.
+        </Text>
+
+        {subscription.trialEndsAt && (
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 8,
+              marginTop: 24,
+              backgroundColor: colors.primarySoft,
+              paddingHorizontal: 16,
+              paddingVertical: 10,
+              borderRadius: 999,
+            }}
+          >
+            <Ionicons name="calendar-outline" size={16} color={colors.primary} />
+            <Text style={{ color: colors.primary, fontWeight: font.weight.semibold, fontSize: font.size.sm }}>
+              Trial ends {fullTimestamp(subscription.trialEndsAt).split(',')[0]}
+            </Text>
+          </View>
+        )}
+      </View>
+
+      <View style={{ paddingHorizontal: 28, paddingBottom: 24, gap: 12 }}>
+        <Button label="Connect your accounts" icon="link-outline" onPress={() => router.replace('/connect-accounts')} />
+        <Button label="Skip for now" variant="ghost" onPress={() => router.replace('/(tabs)')} />
+      </View>
+    </SafeAreaView>
+  );
+}
