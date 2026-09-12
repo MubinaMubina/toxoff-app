@@ -64,6 +64,8 @@ export function Button({
         onPress();
       }}
       disabled={disabled || loading}
+      // Small buttons keep their look but still get a 44pt tap target.
+      hitSlop={Math.max(0, Math.ceil((44 - heights[size]) / 2))}
       style={({ pressed }) => [
         {
           height: heights[size],

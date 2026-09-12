@@ -131,7 +131,7 @@ export default function ConnectAccounts() {
                             </Text>
                           )}
                         </View>
-                        <Pressable onPress={() => confirmDisconnect(account)} hitSlop={8}>
+                        <Pressable onPress={() => confirmDisconnect(account)} hitSlop={12}>
                           <Text style={{ color: colors.danger, fontSize: font.size.sm, fontWeight: font.weight.semibold }}>
                             Disconnect
                           </Text>

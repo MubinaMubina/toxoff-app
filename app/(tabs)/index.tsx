@@ -136,6 +136,9 @@ export default function Dashboard() {
           </View>
           <Pressable
             onPress={() => router.push('/(tabs)/settings')}
+            hitSlop={4}
+            accessibilityRole="button"
+            accessibilityLabel="Settings"
             style={{
               width: 42,
               height: 42,

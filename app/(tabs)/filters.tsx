@@ -350,7 +350,12 @@ function ChipList({
           <Text style={{ color: colors.primary, fontSize: font.size.sm, fontWeight: font.weight.medium }}>
             {item}
           </Text>
-          <Pressable onPress={() => onRemove(item)} hitSlop={6}>
+          <Pressable
+            onPress={() => onRemove(item)}
+            hitSlop={14}
+            accessibilityRole="button"
+            accessibilityLabel={`Remove ${item}`}
+          >
             <Ionicons name="close-circle" size={17} color={colors.primary} />
           </Pressable>
         </View>

@@ -44,7 +44,12 @@ export function TextField({ label, icon, isPassword, ...props }: Props) {
           {...props}
         />
         {isPassword && (
-          <Pressable onPress={() => setHidden((h) => !h)} hitSlop={10}>
+          <Pressable
+            onPress={() => setHidden((h) => !h)}
+            hitSlop={13}
+            accessibilityRole="button"
+            accessibilityLabel={hidden ? 'Show password' : 'Hide password'}
+          >
             <Ionicons name={hidden ? 'eye-outline' : 'eye-off-outline'} size={19} color={colors.textFaint} />
           </Pressable>
         )}
