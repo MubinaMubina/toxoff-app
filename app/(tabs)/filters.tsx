@@ -268,8 +268,9 @@ function LockedFeature({
   const { colors, font } = useTheme();
   return (
     <Pressable onPress={onUpgrade}>
-      <Card style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-        <Ionicons name="lock-closed" size={20} color={colors.primary} />
+      {/* Icon on the first line of text, action under the text: reads top to bottom at any length. */}
+      <Card style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 12 }}>
+        <Ionicons name="lock-closed" size={18} color={colors.primary} style={{ marginTop: 1 }} />
         <View style={{ flex: 1 }}>
           <Text style={{ color: colors.text, fontSize: font.size.sm, lineHeight: 19 }}>{description}</Text>
           <Text style={{ color: colors.textMuted, fontSize: font.size.xs, marginTop: 4, lineHeight: 17 }}>
@@ -277,10 +278,17 @@ function LockedFeature({
             {savedCount > 0 &&
               ` Your ${savedCount} saved ${savedNoun}${savedCount === 1 ? '' : 's'} will apply again when you upgrade.`}
           </Text>
+          <Text
+            style={{
+              color: colors.primary,
+              fontSize: font.size.sm,
+              fontWeight: font.weight.semibold,
+              marginTop: 10,
+            }}
+          >
+            Upgrade to unlock
+          </Text>
         </View>
-        <Text style={{ color: colors.primary, fontSize: font.size.sm, fontWeight: font.weight.semibold }}>
-          Upgrade
-        </Text>
       </Card>
     </Pressable>
   );
