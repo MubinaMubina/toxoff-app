@@ -152,8 +152,9 @@ export default function ConnectAccounts() {
             {accounts.length} of {plan.maxAccounts} account{plan.maxAccounts > 1 ? 's' : ''} used ·{' '}
             {plan.name} plan
           </Text>
-          {atLimit && (
-            <Pressable onPress={() => router.push('/paywall')}>
+          {/* One-account plans get the upgrade banner below instead of a second link. */}
+          {atLimit && plan.maxAccounts > 1 && (
+            <Pressable onPress={() => router.push('/paywall')} hitSlop={12}>
               <Text style={{ color: colors.primary, fontSize: font.size.sm, fontWeight: font.weight.semibold }}>
                 Upgrade
               </Text>
