@@ -29,7 +29,7 @@ export default function Settings() {
   const router = useRouter();
   const { user, subscription, signOut } = useAuth();
   const { accounts, notificationsEnabled, setNotificationsEnabled, savePushToken } = useModeration();
-  const { region, available, setRegionCode } = useRegion();
+  const { region, chooseRegion } = useRegion();
 
   const [savingPush, setSavingPush] = useState(false);
   const plan = getPlan(subscription.plan);
@@ -52,20 +52,6 @@ export default function Settings() {
     }
     savePushToken(token);
     setNotificationsEnabled(true);
-  };
-
-  const changeRegion = () => {
-    Alert.alert(
-      'Billing region',
-      'Pick the region used for pricing and payment methods.',
-      [
-        ...available.map((r) => ({
-          text: `${r.country} (${r.currency})`,
-          onPress: () => setRegionCode(r.code),
-        })),
-        { text: 'Cancel', style: 'cancel' as const },
-      ]
-    );
   };
 
   const confirmLogout = () => {
@@ -201,7 +187,7 @@ export default function Settings() {
             </View>
 
             <RowSeparator />
-            <Pressable onPress={changeRegion} style={ROW}>
+            <Pressable onPress={() => chooseRegion()} style={ROW}>
               <RowIcon>
                 <Ionicons name="globe-outline" size={20} color={colors.text} />
               </RowIcon>

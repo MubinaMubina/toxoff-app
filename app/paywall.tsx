@@ -31,7 +31,7 @@ export default function Paywall() {
   const { colors, font, radius, spacing } = useTheme();
   const router = useRouter();
   const { user, subscription, refreshSubscription, setDemoPlan } = useAuth();
-  const { region, available, setRegionCode } = useRegion();
+  const { region, chooseRegion } = useRegion();
 
   const [interval, setInterval] = useState<BillingInterval>('monthly');
   const [selected, setSelected] = useState<PaidPlanId>('plus');
@@ -52,12 +52,8 @@ export default function Paywall() {
         ? `Choose ${selectedName}`
         : `Upgrade to ${selectedName}`;
 
-  const cycleRegion = () => {
-    const idx = available.findIndex((r) => r.code === region.code);
-    const next = available[(idx + 1) % available.length];
-    setRegionCode(next.code);
-    setMethod(next.methods[0]);
-  };
+  // A new region can have different payment methods, so start from its first one.
+  const changeRegion = () => chooseRegion((next) => setMethod(next.methods[0]));
 
   const subscribe = async () => {
     if (!user) {
@@ -110,7 +106,7 @@ export default function Paywall() {
 
         {/* Region indicator */}
         <Pressable
-          onPress={cycleRegion}
+          onPress={changeRegion}
           style={{
             flexDirection: 'row',
             alignItems: 'center',
