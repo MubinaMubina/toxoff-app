@@ -6,7 +6,7 @@ import { Pressable, ScrollView, Switch, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { PlatformIcon } from '../../src/components/PlatformIcon';
 import { RemovedCommentRow } from '../../src/components/RemovedCommentRow';
-import { Card, EmptyState, SectionLabel } from '../../src/components/ui';
+import { Card, EmptyState, LIST_ROW, RowIcon, RowSeparator, SectionLabel } from '../../src/components/ui';
 import { useAuth } from '../../src/context/AuthContext';
 import { useModeration } from '../../src/context/ModerationContext';
 import { FREE_COMMENT_ALLOWANCE, getPlan } from '../../src/data/plans';
@@ -212,54 +212,57 @@ export default function Dashboard() {
                         : 'Active · moderating';
                 const healthy = acc.connected && !needsUpgrade && !acc.paused;
                 return (
-                  <View
-                    key={acc.id}
-                    style={{
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      gap: 12,
-                      padding: 14,
-                      borderTopWidth: i === 0 ? 0 : 0.5,
-                      borderTopColor: colors.border,
-                    }}
-                  >
-                    <PlatformIcon platform={acc.platform} size={16} withBackground />
-                    <View style={{ flex: 1 }}>
-                      <Text style={{ color: colors.text, fontSize: font.size.md, fontWeight: font.weight.medium }}>
-                        {acc.handle}
-                      </Text>
-                      <Text
-                        style={{
-                          color: healthy ? colors.success : colors.warning,
-                          fontSize: font.size.xs,
-                          marginTop: 1,
-                          fontWeight: font.weight.medium,
-                        }}
-                      >
-                        {status}
-                      </Text>
-                    </View>
-                    {!acc.connected || needsUpgrade ? (
-                      <Pressable
-                        onPress={() => router.push(acc.connected ? '/paywall' : '/connect-accounts')}
-                        hitSlop={8}
-                      >
-                        <Text style={{ color: colors.primary, fontSize: font.size.sm, fontWeight: font.weight.semibold }}>
-                          {acc.connected ? 'Upgrade' : 'Fix'}
+                  <React.Fragment key={acc.id}>
+                    {i > 0 && <RowSeparator />}
+                    <View
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        gap: LIST_ROW.gap,
+                        paddingHorizontal: LIST_ROW.inset,
+                        paddingVertical: 14,
+                      }}
+                    >
+                      <RowIcon>
+                        <PlatformIcon platform={acc.platform} size={17} withBackground />
+                      </RowIcon>
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ color: colors.text, fontSize: font.size.md, fontWeight: font.weight.medium }}>
+                          {acc.handle}
                         </Text>
-                      </Pressable>
-                    ) : (
-                      <Switch
-                        value={!acc.paused}
-                        onValueChange={() => {
-                          Haptics.selectionAsync().catch(() => {});
-                          togglePause(acc.id);
-                        }}
-                        trackColor={{ false: colors.border, true: colors.primary }}
-                        thumbColor="#fff"
-                      />
-                    )}
-                  </View>
+                        <Text
+                          style={{
+                            color: healthy ? colors.success : colors.warning,
+                            fontSize: font.size.xs,
+                            marginTop: 1,
+                            fontWeight: font.weight.medium,
+                          }}
+                        >
+                          {status}
+                        </Text>
+                      </View>
+                      {!acc.connected || needsUpgrade ? (
+                        <Pressable
+                          onPress={() => router.push(acc.connected ? '/paywall' : '/connect-accounts')}
+                          hitSlop={8}
+                        >
+                          <Text style={{ color: colors.primary, fontSize: font.size.sm, fontWeight: font.weight.semibold }}>
+                            {acc.connected ? 'Upgrade' : 'Fix'}
+                          </Text>
+                        </Pressable>
+                      ) : (
+                        <Switch
+                          value={!acc.paused}
+                          onValueChange={() => {
+                            Haptics.selectionAsync().catch(() => {});
+                            togglePause(acc.id);
+                          }}
+                          trackColor={{ false: colors.border, true: colors.primary }}
+                          thumbColor="#fff"
+                        />
+                      )}
+                    </View>
+                  </React.Fragment>
                 );
               })}
             </Card>
@@ -288,14 +291,12 @@ export default function Dashboard() {
               />
             </Card>
           ) : (
-            <Card padded={false} style={{ paddingHorizontal: 16 }}>
+            <Card padded={false}>
               {feed.map((c, i) => (
-                <View
-                  key={c.id}
-                  style={i === 0 ? undefined : { borderTopWidth: 0.5, borderTopColor: colors.border }}
-                >
+                <React.Fragment key={c.id}>
+                  {i > 0 && <RowSeparator />}
                   <RemovedCommentRow comment={c} />
-                </View>
+                </React.Fragment>
               ))}
             </Card>
           )}

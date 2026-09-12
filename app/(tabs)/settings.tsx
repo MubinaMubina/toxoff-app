@@ -4,7 +4,16 @@ import React, { useState } from 'react';
 import { Alert, Pressable, ScrollView, Switch, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { PlatformIcon } from '../../src/components/PlatformIcon';
-import { Badge, Card, SectionLabel, Segmented } from '../../src/components/ui';
+import {
+  Badge,
+  Card,
+  Chevron,
+  LIST_ROW,
+  RowIcon,
+  RowSeparator,
+  SectionLabel,
+  Segmented,
+} from '../../src/components/ui';
 import { useAuth } from '../../src/context/AuthContext';
 import { useModeration } from '../../src/context/ModerationContext';
 import { useRegion } from '../../src/context/RegionContext';
@@ -127,7 +136,7 @@ export default function Settings() {
                         : 'Manage your plan & billing'}
                   </Text>
                 </View>
-                <Ionicons name="chevron-forward" size={20} color={colors.textFaint} />
+                <Chevron />
               </View>
             </Card>
           </Pressable>
@@ -137,41 +146,28 @@ export default function Settings() {
         <View style={{ marginTop: 24 }}>
           <SectionLabel>Connected accounts</SectionLabel>
           <Card padded={false}>
-            {accounts.map((acc, i) => (
-              <View
-                key={acc.id}
-                style={{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  gap: 12,
-                  padding: 14,
-                  borderTopWidth: i === 0 ? 0 : 0.5,
-                  borderTopColor: colors.border,
-                }}
-              >
-                <PlatformIcon platform={acc.platform} size={15} withBackground />
-                <Text style={{ color: colors.text, fontSize: font.size.md, flex: 1, fontWeight: font.weight.medium }}>
-                  {acc.handle}
-                </Text>
-                <Ionicons
-                  name={acc.connected ? 'checkmark-circle' : 'alert-circle'}
-                  size={20}
-                  color={acc.connected ? colors.success : colors.warning}
-                />
-              </View>
+            {accounts.map((acc) => (
+              <React.Fragment key={acc.id}>
+                <View style={ROW}>
+                  <RowIcon>
+                    <PlatformIcon platform={acc.platform} size={17} withBackground />
+                  </RowIcon>
+                  <Text style={{ color: colors.text, fontSize: font.size.md, flex: 1, fontWeight: font.weight.medium }}>
+                    {acc.handle}
+                  </Text>
+                  <Ionicons
+                    name={acc.connected ? 'checkmark-circle' : 'alert-circle'}
+                    size={20}
+                    color={acc.connected ? colors.success : colors.warning}
+                  />
+                </View>
+                <RowSeparator />
+              </React.Fragment>
             ))}
-            <Pressable
-              onPress={() => router.push('/connect-accounts')}
-              style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                gap: 10,
-                padding: 14,
-                borderTopWidth: accounts.length ? 0.5 : 0,
-                borderTopColor: colors.border,
-              }}
-            >
-              <Ionicons name="add-circle-outline" size={22} color={colors.primary} />
+            <Pressable onPress={() => router.push('/connect-accounts')} style={ROW}>
+              <RowIcon>
+                <Ionicons name="add-circle-outline" size={22} color={colors.primary} />
+              </RowIcon>
               <Text style={{ color: colors.primary, fontSize: font.size.md, fontWeight: font.weight.medium }}>
                 {accounts.length ? 'Manage accounts' : 'Connect an account'}
               </Text>
@@ -183,8 +179,10 @@ export default function Settings() {
         <View style={{ marginTop: 24 }}>
           <SectionLabel>Preferences</SectionLabel>
           <Card padded={false}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14 }}>
-              <Ionicons name="notifications-outline" size={20} color={colors.text} />
+            <View style={ROW}>
+              <RowIcon>
+                <Ionicons name="notifications-outline" size={20} color={colors.text} />
+              </RowIcon>
               <View style={{ flex: 1 }}>
                 <Text style={{ color: colors.text, fontSize: font.size.md, fontWeight: font.weight.medium }}>
                   Push alerts
@@ -202,30 +200,26 @@ export default function Settings() {
               />
             </View>
 
-            <Pressable
-              onPress={changeRegion}
-              style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                gap: 12,
-                padding: 14,
-                borderTopWidth: 0.5,
-                borderTopColor: colors.border,
-              }}
-            >
-              <Ionicons name="globe-outline" size={20} color={colors.text} />
+            <RowSeparator />
+            <Pressable onPress={changeRegion} style={ROW}>
+              <RowIcon>
+                <Ionicons name="globe-outline" size={20} color={colors.text} />
+              </RowIcon>
               <Text style={{ color: colors.text, fontSize: font.size.md, flex: 1, fontWeight: font.weight.medium }}>
                 Billing region
               </Text>
               <Text style={{ color: colors.textMuted, fontSize: font.size.sm }}>
                 {region.country} · {region.currency}
               </Text>
-              <Ionicons name="chevron-forward" size={18} color={colors.textFaint} />
+              <Chevron />
             </Pressable>
 
-            <View style={{ padding: 14, borderTopWidth: 0.5, borderTopColor: colors.border, gap: 12 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                <Ionicons name="contrast-outline" size={20} color={colors.text} />
+            <RowSeparator />
+            <View style={{ paddingHorizontal: LIST_ROW.inset, paddingVertical: 14, gap: 12 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: LIST_ROW.gap }}>
+                <RowIcon>
+                  <Ionicons name="contrast-outline" size={20} color={colors.text} />
+                </RowIcon>
                 <Text style={{ color: colors.text, fontSize: font.size.md, fontWeight: font.weight.medium }}>
                   Appearance
                 </Text>
@@ -248,8 +242,10 @@ export default function Settings() {
           <SectionLabel>About</SectionLabel>
           <Card padded={false}>
             <LinkRow icon="document-text-outline" label="Privacy policy" />
-            <LinkRow icon="shield-checkmark-outline" label="Terms of service" border />
-            <LinkRow icon="help-circle-outline" label="Help & support" border />
+            <RowSeparator />
+            <LinkRow icon="shield-checkmark-outline" label="Terms of service" />
+            <RowSeparator />
+            <LinkRow icon="help-circle-outline" label="Help & support" />
           </Card>
         </View>
 
@@ -281,30 +277,25 @@ export default function Settings() {
   );
 }
 
-function LinkRow({
-  icon,
-  label,
-  border,
-}: {
-  icon: keyof typeof Ionicons.glyphMap;
-  label: string;
-  border?: boolean;
-}) {
+const ROW = {
+  flexDirection: 'row',
+  alignItems: 'center',
+  gap: LIST_ROW.gap,
+  paddingHorizontal: LIST_ROW.inset,
+  paddingVertical: 14,
+} as const;
+
+function LinkRow({ icon, label }: { icon: keyof typeof Ionicons.glyphMap; label: string }) {
   const { colors, font } = useTheme();
   return (
-    <Pressable
-      style={{
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 12,
-        padding: 14,
-        borderTopWidth: border ? 0.5 : 0,
-        borderTopColor: colors.border,
-      }}
-    >
-      <Ionicons name={icon} size={20} color={colors.text} />
-      <Text style={{ color: colors.text, fontSize: font.size.md, flex: 1 }}>{label}</Text>
-      <Ionicons name="chevron-forward" size={18} color={colors.textFaint} />
+    <Pressable style={ROW}>
+      <RowIcon>
+        <Ionicons name={icon} size={20} color={colors.text} />
+      </RowIcon>
+      <Text style={{ color: colors.text, fontSize: font.size.md, flex: 1, fontWeight: font.weight.medium }}>
+        {label}
+      </Text>
+      <Chevron />
     </Pressable>
   );
 }

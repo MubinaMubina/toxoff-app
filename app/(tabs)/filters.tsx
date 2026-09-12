@@ -13,7 +13,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Card, SectionLabel, Segmented } from '../../src/components/ui';
+import { Card, LIST_ROW, RowIcon, RowSeparator, SectionLabel, Segmented } from '../../src/components/ui';
 import { useAuth } from '../../src/context/AuthContext';
 import { useModeration } from '../../src/context/ModerationContext';
 import { getPlan, PAID_PLANS } from '../../src/data/plans';
@@ -102,47 +102,50 @@ export default function Filters() {
             <SectionLabel>Categories</SectionLabel>
             <Card padded={false}>
               {CATEGORIES.map((c, i) => (
-                <View
-                  key={c.key}
-                  style={{
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    gap: 12,
-                    padding: 14,
-                    borderTopWidth: i === 0 ? 0 : 0.5,
-                    borderTopColor: colors.border,
-                  }}
-                >
+                <React.Fragment key={c.key}>
+                  {i > 0 && <RowSeparator />}
                   <View
                     style={{
-                      width: 36,
-                      height: 36,
-                      borderRadius: 10,
-                      backgroundColor: colors.surfaceAlt,
+                      flexDirection: 'row',
                       alignItems: 'center',
-                      justifyContent: 'center',
+                      gap: LIST_ROW.gap,
+                      paddingHorizontal: LIST_ROW.inset,
+                      paddingVertical: 14,
                     }}
                   >
-                    <Ionicons name={c.icon} size={18} color={colors.primary} />
+                    <RowIcon>
+                      <View
+                        style={{
+                          width: 32,
+                          height: 32,
+                          borderRadius: 9,
+                          backgroundColor: colors.surfaceAlt,
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                        }}
+                      >
+                        <Ionicons name={c.icon} size={17} color={colors.primary} />
+                      </View>
+                    </RowIcon>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ color: colors.text, fontSize: font.size.md, fontWeight: font.weight.medium }}>
+                        {c.label}
+                      </Text>
+                      <Text style={{ color: colors.textMuted, fontSize: font.size.xs, marginTop: 1 }}>
+                        {c.desc}
+                      </Text>
+                    </View>
+                    <Switch
+                      value={filters.categories[c.key]}
+                      onValueChange={() => {
+                        Haptics.selectionAsync().catch(() => {});
+                        toggleCategory(c.key);
+                      }}
+                      trackColor={{ false: colors.border, true: colors.primary }}
+                      thumbColor="#fff"
+                    />
                   </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ color: colors.text, fontSize: font.size.md, fontWeight: font.weight.medium }}>
-                      {c.label}
-                    </Text>
-                    <Text style={{ color: colors.textMuted, fontSize: font.size.xs, marginTop: 1 }}>
-                      {c.desc}
-                    </Text>
-                  </View>
-                  <Switch
-                    value={filters.categories[c.key]}
-                    onValueChange={() => {
-                      Haptics.selectionAsync().catch(() => {});
-                      toggleCategory(c.key);
-                    }}
-                    trackColor={{ false: colors.border, true: colors.primary }}
-                    thumbColor="#fff"
-                  />
-                </View>
+                </React.Fragment>
               ))}
             </Card>
           </View>

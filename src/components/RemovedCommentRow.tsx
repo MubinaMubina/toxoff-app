@@ -4,16 +4,24 @@ import { useTheme } from '../theme/ThemeContext';
 import { timeAgo } from '../lib/time';
 import { RemovedComment } from '../types';
 import { PlatformIcon } from './PlatformIcon';
-import { ReasonBadge } from './ui';
+import { LIST_ROW, ReasonBadge, RowIcon } from './ui';
 
 /** Compact single-line preview used in the dashboard live feed. */
 export function RemovedCommentRow({ comment }: { comment: RemovedComment }) {
   const { colors, font } = useTheme();
   return (
-    <View style={{ flexDirection: 'row', gap: 12, paddingVertical: 12, alignItems: 'flex-start' }}>
-      <View style={{ paddingTop: 2 }}>
+    <View
+      style={{
+        flexDirection: 'row',
+        gap: LIST_ROW.gap,
+        paddingVertical: 12,
+        paddingHorizontal: LIST_ROW.inset,
+        alignItems: 'flex-start',
+      }}
+    >
+      <RowIcon>
         <PlatformIcon platform={comment.platform} size={14} withBackground />
-      </View>
+      </RowIcon>
       <View style={{ flex: 1 }}>
         <Text numberOfLines={2} style={{ color: colors.text, fontSize: font.size.md, lineHeight: 20 }}>
           {comment.text}

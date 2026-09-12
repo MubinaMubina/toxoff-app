@@ -126,6 +126,30 @@ export function Card({
   );
 }
 
+/* ---------------- List rows ---------------- */
+
+// iOS-style grouped lists: rows inset like Card content, every leading icon centered in the
+// same fixed slot so titles share one left edge, and separators that start at that edge.
+export const LIST_ROW = { inset: 16, icon: 32, gap: 12 } as const;
+const LIST_TEXT_INSET = LIST_ROW.inset + LIST_ROW.icon + LIST_ROW.gap;
+
+export function RowIcon({ children }: { children: React.ReactNode }) {
+  return <View style={{ width: LIST_ROW.icon, alignItems: 'center' }}>{children}</View>;
+}
+
+export function RowSeparator({ inset = LIST_TEXT_INSET }: { inset?: number }) {
+  const { colors } = useTheme();
+  return (
+    <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: colors.border, marginLeft: inset }} />
+  );
+}
+
+/** The disclosure indicator for rows that open another screen or a picker. */
+export function Chevron() {
+  const { colors } = useTheme();
+  return <Ionicons name="chevron-forward" size={18} color={colors.textFaint} />;
+}
+
 /* ---------------- Badge / Chip ---------------- */
 
 export function Badge({

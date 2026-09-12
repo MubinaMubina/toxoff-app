@@ -29,7 +29,7 @@ export function PlatformIcon({
 
   if (!withBackground) return icon;
 
-  const box = size * 1.9;
+  const box = Math.round(size * 1.9); // whole points, so tiles line up with fixed icon slots
   return (
     <View
       style={{
