@@ -28,7 +28,7 @@ const METHOD_ICON: Record<string, keyof typeof Ionicons.glyphMap> = {
 };
 
 export default function Paywall() {
-  const { colors, font, radius } = useTheme();
+  const { colors, font, radius, spacing } = useTheme();
   const router = useRouter();
   const { user, subscription, refreshSubscription, setDemoPlan } = useAuth();
   const { region, available, setRegionCode } = useRegion();
@@ -93,7 +93,7 @@ export default function Paywall() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
-      <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 28 }} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={{ padding: spacing.gutter, paddingBottom: 28 }} showsVerticalScrollIndicator={false}>
         <Pressable onPress={() => router.back()} hitSlop={12} style={{ paddingVertical: 4 }}>
           <Ionicons name="close" size={26} color={colors.text} />
         </Pressable>
@@ -259,7 +259,7 @@ export default function Paywall() {
         </View>
       </ScrollView>
 
-      <View style={{ paddingHorizontal: 20, paddingBottom: 16, paddingTop: 8, borderTopWidth: 0.5, borderTopColor: colors.border }}>
+      <View style={{ paddingHorizontal: spacing.gutter, paddingBottom: 16, paddingTop: 8, borderTopWidth: 0.5, borderTopColor: colors.border }}>
         <Button label={ctaLabel} onPress={subscribe} loading={loading} disabled={isCurrentPlan} />
         <Text style={{ color: colors.textFaint, fontSize: font.size.xs, textAlign: 'center', marginTop: 10 }}>
           Powered by {region.provider === 'safepay' ? 'Safepay' : 'Stripe'} · Secure payments

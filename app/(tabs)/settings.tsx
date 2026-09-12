@@ -14,7 +14,7 @@ import { fullTimestamp } from '../../src/lib/time';
 import { useTheme } from '../../src/theme/ThemeContext';
 
 export default function Settings() {
-  const { colors, font, pref, setPref } = useTheme();
+  const { colors, font, pref, setPref, spacing } = useTheme();
   const router = useRouter();
   const { user, subscription, signOut } = useAuth();
   const { accounts, notificationsEnabled, setNotificationsEnabled, savePushToken } = useModeration();
@@ -73,7 +73,7 @@ export default function Settings() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }} edges={['top']}>
-      <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={{ padding: spacing.gutter, paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
         <Text style={{ color: colors.text, fontSize: font.size.xxl, fontWeight: font.weight.heavy }}>
           Settings
         </Text>

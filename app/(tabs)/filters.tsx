@@ -40,7 +40,7 @@ const SENSITIVITY_HINT: Record<Sensitivity, string> = {
 };
 
 export default function Filters() {
-  const { colors, font, radius } = useTheme();
+  const { colors, font, radius, spacing } = useTheme();
   const router = useRouter();
   const plan = getPlan(useAuth().subscription.plan);
   const {
@@ -69,7 +69,7 @@ export default function Filters() {
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }} edges={['top']}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView
-          contentContainerStyle={{ padding: 20, paddingBottom: 40 }}
+          contentContainerStyle={{ padding: spacing.gutter, paddingBottom: 40 }}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >

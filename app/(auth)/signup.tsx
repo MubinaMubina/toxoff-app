@@ -19,7 +19,7 @@ import { useAuth } from '../../src/context/AuthContext';
 import { useTheme } from '../../src/theme/ThemeContext';
 
 export default function SignUp() {
-  const { colors, font } = useTheme();
+  const { colors, font, spacing } = useTheme();
   const router = useRouter();
   const { signUp } = useAuth();
 
@@ -58,7 +58,7 @@ export default function SignUp() {
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView
-          contentContainerStyle={{ padding: 24, flexGrow: 1 }}
+          contentContainerStyle={{ paddingHorizontal: spacing.gutter, paddingVertical: 24, flexGrow: 1 }}
           keyboardShouldPersistTaps="handled"
         >
           <Pressable onPress={() => router.back()} hitSlop={12} style={{ marginBottom: 20 }}>

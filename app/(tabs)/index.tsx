@@ -95,7 +95,7 @@ function FreeChecksCard({
 }
 
 export default function Dashboard() {
-  const { colors, font } = useTheme();
+  const { colors, font, spacing } = useTheme();
   const router = useRouter();
   const { user, subscription } = useAuth();
   const {
@@ -124,7 +124,7 @@ export default function Dashboard() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }} edges={['top']}>
-      <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 32 }} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={{ padding: spacing.gutter, paddingBottom: 32 }} showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
           <View>

@@ -14,12 +14,12 @@ const HIGHLIGHTS = [
 ] as const;
 
 export default function Splash() {
-  const { colors, font } = useTheme();
+  const { colors, font, spacing } = useTheme();
   const router = useRouter();
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
-      <View style={{ flex: 1, paddingHorizontal: 28, justifyContent: 'space-between' }}>
+      <View style={{ flex: 1, paddingHorizontal: spacing.gutter, justifyContent: 'space-between' }}>
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
           <LogoMark size={76} />
           <View style={{ height: 22 }} />
@@ -40,7 +40,7 @@ export default function Splash() {
             </Text>
           </Text>
 
-          <View style={{ marginTop: 40, gap: 16, alignSelf: 'stretch', paddingHorizontal: 8 }}>
+          <View style={{ marginTop: 40, gap: 16, alignSelf: 'stretch' }}>
             {HIGHLIGHTS.map((h) => (
               <View key={h.text} style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
                 <View

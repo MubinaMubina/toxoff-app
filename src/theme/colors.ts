@@ -92,7 +92,8 @@ export const darkColors: ColorScheme = {
 };
 
 export const radius = { sm: 8, md: 12, lg: 16, xl: 22, pill: 999 };
-export const spacing = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24, xxl: 32 };
+// gutter: the side margin of every screen, so content keeps one left edge app-wide.
+export const spacing = { xs: 4, sm: 8, md: 12, lg: 16, gutter: 20, xl: 24, xxl: 32 };
 export const font = {
   size: { xs: 12, sm: 13, md: 15, lg: 17, xl: 20, xxl: 26, huge: 34 },
   weight: {

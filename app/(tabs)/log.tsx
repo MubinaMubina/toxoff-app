@@ -28,7 +28,7 @@ const REASONS: ModerationReason[] = [
 ];
 
 export default function Log() {
-  const { colors, font } = useTheme();
+  const { colors, font, spacing } = useTheme();
   const { comments, restoreComment } = useModeration();
 
   const [platform, setPlatform] = useState<Platform | 'all'>('all');
@@ -52,7 +52,7 @@ export default function Log() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }} edges={['top']}>
-      <View style={{ paddingHorizontal: 20, paddingTop: 8, paddingBottom: 4 }}>
+      <View style={{ paddingHorizontal: spacing.gutter, paddingTop: 8, paddingBottom: 4 }}>
         <Text style={{ color: colors.text, fontSize: font.size.xxl, fontWeight: font.weight.heavy }}>
           Moderation log
         </Text>
@@ -66,7 +66,7 @@ export default function Log() {
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ paddingHorizontal: 20, gap: 8 }}
+          contentContainerStyle={{ paddingHorizontal: spacing.gutter, gap: 8 }}
         >
           <FilterChip label="All platforms" active={platform === 'all'} onPress={() => setPlatform('all')} />
           <FilterChip label="Instagram" active={platform === 'instagram'} onPress={() => setPlatform('instagram')} />
@@ -76,7 +76,7 @@ export default function Log() {
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ paddingHorizontal: 20, gap: 8, paddingTop: 8 }}
+          contentContainerStyle={{ paddingHorizontal: spacing.gutter, gap: 8, paddingTop: 8 }}
         >
           <FilterChip label="All reasons" active={reason === 'all'} onPress={() => setReason('all')} />
           {REASONS.map((r) => (
@@ -89,7 +89,7 @@ export default function Log() {
           ))}
         </ScrollView>
 
-        <View style={{ paddingHorizontal: 20, paddingTop: 12 }}>
+        <View style={{ paddingHorizontal: spacing.gutter, paddingTop: 12 }}>
           <Segmented<DateRange>
             value={range}
             onChange={setRange}
@@ -107,7 +107,7 @@ export default function Log() {
         data={filtered}
         keyExtractor={(c) => c.id}
         renderItem={({ item }) => <LogRow comment={item} onRestore={restore} />}
-        contentContainerStyle={{ padding: 20, gap: 10, paddingBottom: 32 }}
+        contentContainerStyle={{ padding: spacing.gutter, gap: 10, paddingBottom: 32 }}
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={
           <EmptyState

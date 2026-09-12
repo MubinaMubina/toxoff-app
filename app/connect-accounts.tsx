@@ -19,7 +19,7 @@ const META: Record<Platform, { name: string; blurb: string }> = {
 };
 
 export default function ConnectAccounts() {
-  const { colors, font } = useTheme();
+  const { colors, font, spacing } = useTheme();
   const router = useRouter();
   const { accounts, connectAccount, disconnectAccount } = useModeration();
   const { subscription } = useAuth();
@@ -60,7 +60,7 @@ export default function ConnectAccounts() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
-      <ScrollView contentContainerStyle={{ flexGrow: 1, paddingHorizontal: 24 }}>
+      <ScrollView contentContainerStyle={{ flexGrow: 1, paddingHorizontal: spacing.gutter }}>
         <Pressable onPress={() => router.back()} hitSlop={12} style={{ paddingVertical: 14 }}>
           <Ionicons name="close" size={26} color={colors.text} />
         </Pressable>

@@ -10,13 +10,13 @@ import { fullTimestamp } from '../../src/lib/time';
 import { useTheme } from '../../src/theme/ThemeContext';
 
 export default function TrialStarted() {
-  const { colors, font } = useTheme();
+  const { colors, font, spacing } = useTheme();
   const router = useRouter();
   const { subscription } = useAuth();
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
-      <View style={{ flex: 1, paddingHorizontal: 28, alignItems: 'center', justifyContent: 'center' }}>
+      <View style={{ flex: 1, paddingHorizontal: spacing.gutter, alignItems: 'center', justifyContent: 'center' }}>
         <View
           style={{
             width: 110,
@@ -77,7 +77,7 @@ export default function TrialStarted() {
         )}
       </View>
 
-      <View style={{ paddingHorizontal: 28, paddingBottom: 24, gap: 12 }}>
+      <View style={{ paddingHorizontal: spacing.gutter, paddingBottom: 24, gap: 12 }}>
         <Button label="Connect your accounts" icon="link-outline" onPress={() => router.replace('/connect-accounts')} />
         <Button label="Skip for now" variant="ghost" onPress={() => router.replace('/(tabs)')} />
       </View>
