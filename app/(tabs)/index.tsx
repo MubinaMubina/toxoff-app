@@ -129,7 +129,8 @@ export default function Dashboard() {
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
           <View>
             <Text style={{ color: colors.textMuted, fontSize: font.size.md }}>Welcome back,</Text>
-            <Text style={{ color: colors.text, fontSize: font.size.xxl, fontWeight: font.weight.heavy }}>
+            {/* Same size as the other tabs' titles (ScreenTitle). */}
+            <Text style={{ color: colors.text, fontSize: font.size.huge, fontWeight: font.weight.heavy }}>
               {firstName} 👋
             </Text>
           </View>

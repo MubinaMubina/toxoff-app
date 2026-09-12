@@ -3,7 +3,7 @@ import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Badge, Button, Segmented } from '../src/components/ui';
+import { Badge, Button, H1, Segmented } from '../src/components/ui';
 import { useAuth } from '../src/context/AuthContext';
 import { useRegion } from '../src/context/RegionContext';
 import { getPlan, PAID_PLANS } from '../src/data/plans';
@@ -98,9 +98,7 @@ export default function Paywall() {
           <Ionicons name="close" size={26} color={colors.text} />
         </Pressable>
 
-        <Text style={{ color: colors.text, fontSize: font.size.huge, fontWeight: font.weight.heavy, marginTop: 8 }}>
-          Choose your plan
-        </Text>
+        <H1 style={{ marginTop: 8 }}>Choose your plan</H1>
         <Text style={{ color: colors.textMuted, fontSize: font.size.md, marginTop: 6, lineHeight: 21 }}>
           {trialEnd
             ? `Your free trial ends ${trialEnd}. Pick a plan now — you won’t be charged until then.`

@@ -13,7 +13,15 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Card, LIST_ROW, RowIcon, RowSeparator, SectionLabel, Segmented } from '../../src/components/ui';
+import {
+  Card,
+  LIST_ROW,
+  RowIcon,
+  RowSeparator,
+  ScreenTitle,
+  SectionLabel,
+  Segmented,
+} from '../../src/components/ui';
 import { useAuth } from '../../src/context/AuthContext';
 import { useModeration } from '../../src/context/ModerationContext';
 import { getPlan, PAID_PLANS } from '../../src/data/plans';
@@ -73,12 +81,7 @@ export default function Filters() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <Text style={{ color: colors.text, fontSize: font.size.xxl, fontWeight: font.weight.heavy }}>
-            Filters
-          </Text>
-          <Text style={{ color: colors.textMuted, fontSize: font.size.md, marginTop: 2 }}>
-            Tune what toxoff removes for you.
-          </Text>
+          <ScreenTitle title="Filters" subtitle="Tune what toxoff removes for you." />
 
           {/* Sensitivity */}
           <View style={{ marginTop: spacing.xl }}>

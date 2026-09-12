@@ -11,6 +11,7 @@ import {
   LIST_ROW,
   RowIcon,
   RowSeparator,
+  ScreenTitle,
   SectionLabel,
   Segmented,
 } from '../../src/components/ui';
@@ -83,9 +84,7 @@ export default function Settings() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }} edges={['top']}>
       <ScrollView contentContainerStyle={{ padding: spacing.gutter, paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
-        <Text style={{ color: colors.text, fontSize: font.size.xxl, fontWeight: font.weight.heavy }}>
-          Settings
-        </Text>
+        <ScreenTitle title="Settings" />
 
         {/* Profile */}
         <Card style={{ marginTop: spacing.xl, flexDirection: 'row', alignItems: 'center', gap: 14 }}>

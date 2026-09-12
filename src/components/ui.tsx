@@ -217,6 +217,21 @@ export function ReasonBadge({ reason }: { reason: string }) {
 
 /* ---------------- Text helpers ---------------- */
 
+/** A tab screen's title, at the iOS large-title size, with an optional line under it. */
+export function ScreenTitle({ title, subtitle }: { title: string; subtitle?: string }) {
+  const { colors, font } = useTheme();
+  return (
+    <View>
+      <Text style={{ color: colors.text, fontSize: font.size.huge, fontWeight: font.weight.heavy }}>
+        {title}
+      </Text>
+      {subtitle ? (
+        <Text style={{ color: colors.textMuted, fontSize: font.size.md, marginTop: 2 }}>{subtitle}</Text>
+      ) : null}
+    </View>
+  );
+}
+
 export function H1({ children, style }: { children: React.ReactNode; style?: StyleProp<TextStyle> }) {
   const { colors, font } = useTheme();
   return (

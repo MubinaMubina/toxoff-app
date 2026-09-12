@@ -3,7 +3,7 @@ import { Alert, FlatList, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { FilterChip } from '../../src/components/FilterChip';
 import { LogRow } from '../../src/components/LogRow';
-import { EmptyState, Segmented } from '../../src/components/ui';
+import { EmptyState, ScreenTitle, Segmented } from '../../src/components/ui';
 import { useModeration } from '../../src/context/ModerationContext';
 import { REASON_LABELS } from '../../src/data/mockData';
 import { DAY_MS } from '../../src/lib/time';
@@ -52,13 +52,11 @@ export default function Log() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }} edges={['top']}>
-      <View style={{ paddingHorizontal: spacing.gutter, paddingTop: 8, paddingBottom: 4 }}>
-        <Text style={{ color: colors.text, fontSize: font.size.xxl, fontWeight: font.weight.heavy }}>
-          Moderation log
-        </Text>
-        <Text style={{ color: colors.textMuted, fontSize: font.size.md, marginTop: 2 }}>
-          {filtered.length} removed {filtered.length === 1 ? 'comment' : 'comments'}
-        </Text>
+      <View style={{ paddingHorizontal: spacing.gutter, paddingTop: spacing.gutter, paddingBottom: 4 }}>
+        <ScreenTitle
+          title="Moderation log"
+          subtitle={`${filtered.length} removed ${filtered.length === 1 ? 'comment' : 'comments'}`}
+        />
       </View>
 
       {/* Filters */}
