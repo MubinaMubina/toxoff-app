@@ -15,9 +15,10 @@ const anonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
  */
 export const isSupabaseConfigured = Boolean(url && anonKey);
 
+// || (not ??) so blank values in .env also fall back instead of crashing createClient.
 export const supabase = createClient(
-  url ?? 'https://placeholder.supabase.co',
-  anonKey ?? 'public-anon-placeholder-key',
+  url || 'https://placeholder.supabase.co',
+  anonKey || 'public-anon-placeholder-key',
   {
     auth: {
       storage: AsyncStorage,
