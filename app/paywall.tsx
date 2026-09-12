@@ -179,11 +179,11 @@ export default function Paywall() {
                   {plan.tagline}
                 </Text>
 
-                <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 4, marginTop: 12 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 4, marginTop: 12 }}>
                   <Text style={{ color: colors.text, fontSize: font.size.huge, fontWeight: font.weight.heavy }}>
                     {formatPrice(region, perMonth)}
                   </Text>
-                  <Text style={{ color: colors.textMuted, fontSize: font.size.md, marginBottom: 6 }}>/mo</Text>
+                  <Text style={{ color: colors.textMuted, fontSize: font.size.md }}>/mo</Text>
                   <View style={{ flex: 1 }} />
                   {subscription.status === 'active' && subscription.plan === plan.id && (
                     <Badge label="Current plan" color={colors.success} bg={colors.successSoft} />
@@ -198,8 +198,9 @@ export default function Paywall() {
 
                 <View style={{ marginTop: 14, gap: 8 }}>
                   {plan.features.map((f) => (
-                    <View key={f} style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                      <Ionicons name="checkmark" size={16} color={colors.primary} />
+                    <View key={f} style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
+                      {/* On the first line, so a feature that wraps keeps its check beside its start. */}
+                      <Ionicons name="checkmark" size={16} color={colors.primary} style={{ marginTop: 1 }} />
                       <Text style={{ color: colors.text, fontSize: font.size.sm, flex: 1 }}>{f}</Text>
                     </View>
                   ))}
