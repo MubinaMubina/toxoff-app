@@ -188,7 +188,7 @@ export default function Settings() {
                   Push alerts
                 </Text>
                 <Text style={{ color: colors.textMuted, fontSize: font.size.xs, marginTop: 1 }}>
-                  Notify me when comments are removed
+                  When a comment is hidden
                 </Text>
               </View>
               <Switch
