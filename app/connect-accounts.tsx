@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { PlatformIcon } from '../src/components/PlatformIcon';
-import { Button, Card, H1, Muted } from '../src/components/ui';
+import { Button, Card, H1, Muted, RowSeparator } from '../src/components/ui';
 import { useAuth } from '../src/context/AuthContext';
 import { useModeration } from '../src/context/ModerationContext';
 import { getPlan } from '../src/data/plans';
@@ -17,6 +17,12 @@ const META: Record<Platform, { name: string; blurb: string }> = {
   instagram: { name: 'Instagram', blurb: 'Comments on posts, reels & stories' },
   tiktok: { name: 'TikTok', blurb: 'Comments on your videos' },
 };
+
+// Linked accounts sit in the same two columns as the platform header: status icon under the
+// logo, handle under the platform name.
+const LOGO_SIZE = 20;
+const LOGO_BOX = 38; // PlatformIcon's tile at LOGO_SIZE
+const COLUMN_GAP = 14;
 
 export default function ConnectAccounts() {
   const { colors, font, spacing } = useTheme();
@@ -75,8 +81,8 @@ export default function ConnectAccounts() {
             const linked = accounts.filter((a) => a.platform === platform);
             return (
               <Card key={platform}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
-                  <PlatformIcon platform={platform} size={20} withBackground />
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: COLUMN_GAP }}>
+                  <PlatformIcon platform={platform} size={LOGO_SIZE} withBackground />
                   <View style={{ flex: 1 }}>
                     <Text style={{ color: colors.text, fontSize: font.size.lg, fontWeight: font.weight.semibold }}>
                       {META[platform].name}
@@ -94,6 +100,7 @@ export default function ConnectAccounts() {
                       fullWidth={false}
                       disabled={atLimit || connecting !== null}
                       onPress={() => connect(platform)}
+                      style={{ alignSelf: 'center' }}
                     />
                   )}
                 </View>
@@ -106,38 +113,32 @@ export default function ConnectAccounts() {
                       ? `Not moderated on ${plan.name} — upgrade or disconnect another account`
                       : null;
                   return (
-                    <View
-                      key={account.id}
-                      style={{
-                        flexDirection: 'row',
-                        alignItems: 'center',
-                        gap: 8,
-                        marginTop: 14,
-                        paddingTop: 12,
-                        borderTopWidth: 0.5,
-                        borderTopColor: colors.border,
-                      }}
-                    >
-                      <Ionicons
-                        name={warning ? 'alert-circle' : 'checkmark-circle'}
-                        size={20}
-                        color={warning ? colors.warning : colors.success}
-                      />
-                      <View style={{ flex: 1 }}>
-                        <Text style={{ color: colors.text, fontSize: font.size.md, fontWeight: font.weight.medium }}>
-                          {account.handle}
-                        </Text>
-                        {warning && (
-                          <Text style={{ color: colors.warning, fontSize: font.size.xs, marginTop: 1 }}>
-                            {warning}
+                    <View key={account.id} style={{ marginTop: 14 }}>
+                      <RowSeparator inset={LOGO_BOX + COLUMN_GAP} />
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: COLUMN_GAP, paddingTop: 12 }}>
+                        <View style={{ width: LOGO_BOX, alignItems: 'center' }}>
+                          <Ionicons
+                            name={warning ? 'alert-circle' : 'checkmark-circle'}
+                            size={20}
+                            color={warning ? colors.warning : colors.success}
+                          />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={{ color: colors.text, fontSize: font.size.md, fontWeight: font.weight.medium }}>
+                            {account.handle}
                           </Text>
-                        )}
+                          {warning && (
+                            <Text style={{ color: colors.warning, fontSize: font.size.xs, marginTop: 1 }}>
+                              {warning}
+                            </Text>
+                          )}
+                        </View>
+                        <Pressable onPress={() => confirmDisconnect(account)} hitSlop={8}>
+                          <Text style={{ color: colors.danger, fontSize: font.size.sm, fontWeight: font.weight.semibold }}>
+                            Disconnect
+                          </Text>
+                        </Pressable>
                       </View>
-                      <Pressable onPress={() => confirmDisconnect(account)} hitSlop={8}>
-                        <Text style={{ color: colors.danger, fontSize: font.size.sm, fontWeight: font.weight.semibold }}>
-                          Disconnect
-                        </Text>
-                      </Pressable>
                     </View>
                   );
                 })}
