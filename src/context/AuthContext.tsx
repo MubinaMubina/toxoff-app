@@ -13,7 +13,7 @@ import React, {
 } from 'react';
 import { TRIAL_DAYS } from '../data/plans';
 import { isSupabaseConfigured, supabase } from '../lib/supabase';
-import { PlanId } from '../types';
+import { BillingInterval, PaidPlanId, PlanId } from '../types';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -23,10 +23,21 @@ export type AppUser = {
   name: string;
 };
 
+// The user's Stripe subscription, as the backend copies it onto their profile.
+export type Billing = {
+  status: 'scheduled' | 'active' | 'past_due'; // see profiles.billing_status (supabase/migrations)
+  plan: PaidPlanId;
+  interval: BillingInterval;
+  periodEnd: string | null; // ISO: the next charge, or when it ends if cancelling
+  cancelAtPeriodEnd: boolean;
+};
+
 export type Subscription = {
   plan: PlanId; // what the user can use right now
   status: 'trialing' | 'active' | 'free';
   trialEndsAt: string | null; // ISO
+  billing: Billing | null;
+  paying: boolean; // comments aren't counted against the free checks
 };
 
 // null = the user closed the sign-in sheet; isNew = the account was just created.
@@ -42,32 +53,63 @@ type AuthValue = {
   signInWithApple: () => Promise<SocialSignInResult>;
   signOut: () => Promise<void>;
   refreshSubscription: () => Promise<void>;
-  setDemoPlan: (plan: PlanId) => void;
+  setDemoBilling: (billing: Billing | null) => void;
 };
+
+const PROFILE_COLUMNS =
+  'plan, trial_ends_at, sub_status, billing_status, billing_plan, billing_interval, billing_period_end, billing_cancel_at_period_end';
 
 type ProfileRow = {
   plan: PlanId | null;
   trial_ends_at: string | null;
   sub_status: 'trialing' | 'active' | 'none' | null;
+  billing_status: 'none' | Billing['status'];
+  billing_plan: PaidPlanId | null;
+  billing_interval: BillingInterval | null;
+  billing_period_end: string | null;
+  billing_cancel_at_period_end: boolean;
 };
 
-const FREE: Subscription = { plan: 'free', status: 'free', trialEndsAt: null };
+const FREE: Subscription = { plan: 'free', status: 'free', trialEndsAt: null, billing: null, paying: false };
+
+// How long a plan chosen during the trial holds after the trial ends while Stripe hasn't reported
+// the first charge yet. Must match effective_plan() (supabase/migrations).
+const SCHEDULED_GRACE_MS = 3 * 86_400_000;
 
 const AuthContext = createContext<AuthValue | undefined>(undefined);
 
-// Mirrors public.effective_plan() (supabase/migrations).
+function toBilling(p: ProfileRow): Billing | null {
+  if (p.billing_status === 'none' || !p.billing_plan || !p.billing_interval) return null;
+  return {
+    status: p.billing_status,
+    plan: p.billing_plan,
+    interval: p.billing_interval,
+    periodEnd: p.billing_period_end,
+    cancelAtPeriodEnd: p.billing_cancel_at_period_end,
+  };
+}
+
+// Mirrors public.effective_plan() and public.is_paying() (supabase/migrations).
 function toSubscription(p: ProfileRow): Subscription {
+  const billing = toBilling(p);
+  const scheduled =
+    billing?.status === 'scheduled' &&
+    billing.periodEnd !== null &&
+    Date.parse(billing.periodEnd) > Date.now() - SCHEDULED_GRACE_MS;
+  const common = { trialEndsAt: p.trial_ends_at, billing, paying: p.sub_status === 'active' || scheduled };
   if (p.sub_status === 'active' && p.plan) {
-    return { plan: p.plan, status: 'active', trialEndsAt: p.trial_ends_at };
+    return { ...common, plan: p.plan, status: 'active' };
   }
   const inTrial =
     p.sub_status === 'trialing' &&
     p.trial_ends_at !== null &&
     new Date(p.trial_ends_at).getTime() > Date.now();
   if (inTrial && p.plan) {
-    return { plan: p.plan, status: 'trialing', trialEndsAt: p.trial_ends_at };
+    return { ...common, plan: p.plan, status: 'trialing' };
   }
-  return { ...FREE, trialEndsAt: p.trial_ends_at };
+  // Chosen during the trial, which has ended: the plan holds while Stripe reports the first charge.
+  if (scheduled && billing) return { ...common, plan: billing.plan, status: 'active' };
+  return { ...common, plan: 'free', status: 'free' };
 }
 
 // Supabase stamps created_at and last_sign_in_at together on an account's first sign-in.
@@ -87,7 +129,7 @@ function toAppUser(u: User): AppUser {
 function demoTrial(plan: PlanId): Subscription {
   const d = new Date();
   d.setDate(d.getDate() + TRIAL_DAYS);
-  return { plan, trialEndsAt: d.toISOString(), status: 'trialing' };
+  return { plan, trialEndsAt: d.toISOString(), status: 'trialing', billing: null, paying: false };
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -109,7 +151,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const loadSubscription = useCallback(async (id: string) => {
     const { data, error } = await supabase
       .from('profiles')
-      .select('plan, trial_ends_at, sub_status')
+      .select(PROFILE_COLUMNS)
       .eq('id', id)
       .single();
     if (error) throw error;
@@ -123,6 +165,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return;
     }
     loadSubscription(userId).catch((e) => console.warn('Could not load subscription', e));
+
+    // Stripe's webhooks change the subscription on the server (renewals, failed charges, the
+    // first charge after the trial); show it as it happens.
+    const channel = supabase
+      .channel(`subscription:${userId}`)
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${userId}` },
+        (payload) => setSubscription(toSubscription(payload.new as ProfileRow))
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [userId, loadSubscription]);
 
   const signUp = async (email: string, password: string, name: string) => {
@@ -221,12 +277,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setSubscription(FREE);
   };
 
-  // Billing state is written by the backend (payment webhooks); re-read it after checkout.
+  // Billing state is written by the backend (Stripe webhooks); re-read it after checkout.
   const refreshSubscription = useCallback(async () => {
     if (isSupabaseConfigured && userId) await loadSubscription(userId);
   }, [userId, loadSubscription]);
 
-  const setDemoPlan = (plan: PlanId) => setSubscription((s) => ({ ...s, plan, status: 'active' }));
+  // Demo mode stands in for Stripe here; null ends the subscription.
+  const setDemoBilling = (billing: Billing | null) =>
+    setSubscription((s) =>
+      billing
+        ? { ...s, plan: billing.plan, status: 'active', billing, paying: true }
+        : { ...s, plan: 'free', status: 'free', billing: null, paying: false }
+    );
 
   const value = useMemo<AuthValue>(
     () => ({
@@ -239,7 +301,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       signInWithApple,
       signOut,
       refreshSubscription,
-      setDemoPlan,
+      setDemoBilling,
     }),
     [user, subscription, loading, refreshSubscription]
   );

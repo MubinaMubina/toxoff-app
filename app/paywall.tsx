@@ -14,7 +14,7 @@ import {
   priceFor,
 } from '../src/data/pricing';
 import { startSubscription } from '../src/lib/billing';
-import { fullTimestamp } from '../src/lib/time';
+import { shortDate } from '../src/lib/time';
 import { useTheme } from '../src/theme/ThemeContext';
 import { BillingInterval, PaidPlanId, PaymentMethod } from '../src/types';
 
@@ -28,29 +28,55 @@ const METHOD_ICON: Record<string, keyof typeof Ionicons.glyphMap> = {
 };
 
 export default function Paywall() {
-  const { colors, font, radius, spacing } = useTheme();
+  const { colors, font, radius, spacing, isDark } = useTheme();
   const router = useRouter();
-  const { user, subscription, refreshSubscription, setDemoPlan } = useAuth();
+  const { user, subscription, refreshSubscription, setDemoBilling } = useAuth();
   const { region, chooseRegion } = useRegion();
+  const billing = subscription.billing;
 
-  const [interval, setInterval] = useState<BillingInterval>('monthly');
-  const [selected, setSelected] = useState<PaidPlanId>('plus');
+  // Opens on the plan the user already has, if any.
+  const [interval, setInterval] = useState<BillingInterval>(billing?.interval ?? 'monthly');
+  const [selected, setSelected] = useState<PaidPlanId>(billing?.plan ?? 'plus');
   const [method, setMethod] = useState<PaymentMethod>(region.methods[0]);
   const [loading, setLoading] = useState(false);
 
   const selectedName = getPlan(selected).name;
   const trialEnd =
     subscription.status === 'trialing' && subscription.trialEndsAt
-      ? fullTimestamp(subscription.trialEndsAt).split(',')[0]
+      ? shortDate(subscription.trialEndsAt)
       : null;
-  const isCurrentPlan = subscription.status === 'active' && subscription.plan === selected;
+  const scheduled = billing?.status === 'scheduled';
+  const cancelling = billing?.cancelAtPeriodEnd ?? false;
+  // The plan the user pays for (or has chosen for after the trial), if any.
+  const paidPlan = billing?.plan ?? (subscription.status === 'active' ? subscription.plan : null);
+  const onSelected = billing
+    ? billing.plan === selected && billing.interval === interval
+    : paidPlan === selected;
+  const isCurrentPlan = onSelected && !cancelling;
   const ctaLabel = isCurrentPlan
-    ? 'Your current plan'
-    : subscription.status === 'active'
-      ? `Switch to ${selectedName}`
-      : subscription.status === 'trialing'
-        ? `Choose ${selectedName}`
-        : `Upgrade to ${selectedName}`;
+    ? scheduled
+      ? 'Starts when your trial ends'
+      : 'Your current plan'
+    : onSelected
+      ? `Keep ${selectedName}` // cancelling: this takes it back
+      : paidPlan === selected
+        ? `Switch to ${interval} billing`
+        : paidPlan
+          ? `Switch to ${selectedName}`
+          : subscription.status === 'trialing'
+            ? `Choose ${selectedName}`
+            : `Upgrade to ${selectedName}`;
+
+  const subtitle =
+    scheduled && trialEnd
+      ? `${getPlan(billing!.plan).name} starts ${trialEnd}, when your free trial ends. You won’t be charged before then.`
+      : trialEnd
+        ? `Your free trial ends ${trialEnd}. Pick a plan now — you won’t be charged until then.`
+        : cancelling && billing?.periodEnd
+          ? `Your ${getPlan(billing.plan).name} plan ends ${shortDate(billing.periodEnd)}. Choose a plan to keep going.`
+          : subscription.status === 'free'
+            ? 'Unlimited moderation, more accounts, and custom rules. Cancel anytime.'
+            : 'Change your plan anytime.';
 
   // A new region can have different payment methods, so start from its first one.
   const changeRegion = () => chooseRegion((next) => setMethod(next.methods[0]));
@@ -67,17 +93,37 @@ export default function Paywall() {
         interval,
         region,
         method,
+        email: user.email,
+        dark: isDark,
       });
       if (result.status === 'cancelled') return;
-      if (result.status === 'demo') setDemoPlan(selected);
-      else await refreshSubscription();
+      if (result.status === 'demo') {
+        const periodEnd = new Date();
+        if (interval === 'annual') periodEnd.setFullYear(periodEnd.getFullYear() + 1);
+        else periodEnd.setMonth(periodEnd.getMonth() + 1);
+        setDemoBilling({
+          status: 'active',
+          plan: selected,
+          interval,
+          periodEnd: periodEnd.toISOString(),
+          cancelAtPeriodEnd: false,
+        });
+      } else {
+        await refreshSubscription();
+      }
       Alert.alert(
-        'You’re all set 🎉',
+        result.status === 'changed' ? 'Plan updated' : 'You’re all set 🎉',
         result.status === 'demo'
           ? `Demo mode: you're on ${selectedName}. Connect a real ${region.provider === 'safepay' ? 'Safepay' : 'Stripe'} backend to take live payments.`
-          : trialEnd
-            ? `You're on ${selectedName}. You won’t be charged until your free trial ends on ${trialEnd}.`
-            : `You're on ${selectedName}.`
+          : result.status === 'changed'
+            ? onSelected
+              ? `${selectedName} will keep renewing.`
+              : scheduled && trialEnd
+                ? `${selectedName} starts ${trialEnd}, when your free trial ends, billed ${interval === 'annual' ? 'yearly' : 'monthly'}.`
+                : `You're now on ${selectedName}, billed ${interval === 'annual' ? 'yearly' : 'monthly'}.`
+            : result.startsLater && trialEnd
+              ? `${selectedName} starts ${trialEnd}, when your free trial ends. You won’t be charged before then.`
+              : `You're on ${selectedName}.`
       );
       router.back();
     } catch (e: any) {
@@ -97,11 +143,7 @@ export default function Paywall() {
 
         <H1 style={{ marginTop: 8 }}>Choose your plan</H1>
         <Text style={{ color: colors.textMuted, fontSize: font.size.md, marginTop: 6, lineHeight: 21 }}>
-          {trialEnd
-            ? `Your free trial ends ${trialEnd}. Pick a plan now — you won’t be charged until then.`
-            : subscription.status === 'free'
-              ? 'Unlimited moderation, more accounts, and custom rules. Cancel anytime.'
-              : 'Change your plan anytime.'}
+          {subtitle}
         </Text>
 
         {/* Region indicator */}
@@ -181,8 +223,15 @@ export default function Paywall() {
                   </Text>
                   <Text style={{ color: colors.textMuted, fontSize: font.size.md }}>/mo</Text>
                   <View style={{ flex: 1 }} />
-                  {subscription.status === 'active' && subscription.plan === plan.id && (
-                    <Badge label="Current plan" color={colors.success} bg={colors.successSoft} />
+                  {paidPlan === plan.id && (
+                    // Centred on the price (Badge alone would sit at the top of this baseline row).
+                    <View style={{ alignSelf: 'center' }}>
+                      <Badge
+                        label={scheduled && billing?.periodEnd ? `Starts ${shortDate(billing.periodEnd)}` : 'Current plan'}
+                        color={colors.success}
+                        bg={colors.successSoft}
+                      />
+                    </View>
                   )}
                 </View>
 
@@ -206,53 +255,58 @@ export default function Paywall() {
           })}
         </View>
 
-        {/* Payment methods */}
-        <Text
-          style={{
-            color: colors.textMuted,
-            fontSize: font.size.xs,
-            fontWeight: font.weight.semibold,
-            letterSpacing: 0.6,
-            textTransform: 'uppercase',
-            marginTop: 24,
-            marginBottom: 10,
-          }}
-        >
-          Pay with
-        </Text>
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-          {region.methods.map((m) => {
-            const active = method === m;
-            return (
-              <Pressable
-                key={m}
-                onPress={() => setMethod(m)}
-                style={{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  gap: 7,
-                  paddingHorizontal: 14,
-                  paddingVertical: 10,
-                  borderRadius: radius.md,
-                  borderWidth: 1.5,
-                  borderColor: active ? colors.primary : colors.border,
-                  backgroundColor: active ? colors.primarySoft : colors.card,
-                }}
-              >
-                <Ionicons name={METHOD_ICON[m]} size={17} color={active ? colors.primary : colors.textMuted} />
-                <Text
-                  style={{
-                    color: active ? colors.primary : colors.text,
-                    fontSize: font.size.sm,
-                    fontWeight: font.weight.medium,
-                  }}
-                >
-                  {METHOD_LABEL[m]}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
+        {/* Payment methods. Stripe's payment sheet offers its own (card, and Apple Pay or Google Pay
+            where set up), so the choice here is only for Safepay's JazzCash and Easypaisa. */}
+        {region.provider === 'safepay' && (
+          <>
+            <Text
+              style={{
+                color: colors.textMuted,
+                fontSize: font.size.xs,
+                fontWeight: font.weight.semibold,
+                letterSpacing: 0.6,
+                textTransform: 'uppercase',
+                marginTop: 24,
+                marginBottom: 10,
+              }}
+            >
+              Pay with
+            </Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+              {region.methods.map((m) => {
+                const active = method === m;
+                return (
+                  <Pressable
+                    key={m}
+                    onPress={() => setMethod(m)}
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: 7,
+                      paddingHorizontal: 14,
+                      paddingVertical: 10,
+                      borderRadius: radius.md,
+                      borderWidth: 1.5,
+                      borderColor: active ? colors.primary : colors.border,
+                      backgroundColor: active ? colors.primarySoft : colors.card,
+                    }}
+                  >
+                    <Ionicons name={METHOD_ICON[m]} size={17} color={active ? colors.primary : colors.textMuted} />
+                    <Text
+                      style={{
+                        color: active ? colors.primary : colors.text,
+                        fontSize: font.size.sm,
+                        fontWeight: font.weight.medium,
+                      }}
+                    >
+                      {METHOD_LABEL[m]}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </>
+        )}
       </ScrollView>
 
       <View style={{ paddingHorizontal: spacing.gutter, paddingBottom: 16, paddingTop: 8, borderTopWidth: 0.5, borderTopColor: colors.border }}>

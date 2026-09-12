@@ -1,3 +1,4 @@
+import { billingReturn, cancel, portal, receiveStripeWebhook, subscribe, sync } from './billing.ts';
 import { restoreComment } from './comments.ts';
 import { finishConnect, instagramCallback, startConnect } from './connect.ts';
 import { refreshTokens } from './cron.ts';
@@ -26,6 +27,18 @@ export async function handle(req: Request): Promise<Response> {
         return await receiveInstagramWebhook(req);
       case 'POST /cron/refresh-tokens':
         return await refreshTokens(req);
+      case 'POST /billing/subscribe':
+        return await subscribe(req);
+      case 'POST /billing/sync':
+        return await sync(req);
+      case 'POST /billing/cancel':
+        return await cancel(req);
+      case 'POST /billing/portal':
+        return await portal(req);
+      case 'GET /billing/return':
+        return billingReturn(url);
+      case 'POST /webhooks/stripe':
+        return await receiveStripeWebhook(req);
       default:
         return json({ error: 'Not found.' }, 404);
     }

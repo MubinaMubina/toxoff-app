@@ -113,6 +113,7 @@ One Supabase Edge Function, `supabase/functions/api`, deployed at
 | `POST /comments/restore` | app | un-hides the comment on Instagram, marks the log row restored |
 | `GET`/`POST /webhooks/instagram` | Meta | webhook check / new comments: check, hide, log, push |
 | `POST /cron/refresh-tokens` | daily job | extends Instagram tokens before they expire |
+| `POST /billing/…`, `POST /webhooks/stripe` | app, Stripe | subscriptions (see [Stripe](#stripe) below) |
 
 For each comment, `pipeline.ts` skips paused, disconnected and over-the-limit accounts (the oldest
 accounts within the plan are moderated). It then takes the comment on once with `claim_comment()`,
@@ -123,8 +124,8 @@ the check is given back and the webhook returns an error, so Meta delivers the c
 **Secrets** (`npx supabase secrets set`, never in the app):
 - `CONNECT_SECRET`, `CRON_SECRET`, `INSTAGRAM_WEBHOOK_VERIFY_TOKEN` are set. The verify token is
   also in the Keychain (`supabase-toxoff-ig-verify-token`) for Meta's dashboard.
-- To add: `INSTAGRAM_APP_ID`, `INSTAGRAM_APP_SECRET`, `OPENAI_API_KEY`. Until they exist, those
-  routes answer 503 "missing … setting".
+- To add: `INSTAGRAM_APP_ID`, `INSTAGRAM_APP_SECRET`, `OPENAI_API_KEY`, `STRIPE_SECRET_KEY`,
+  `STRIPE_WEBHOOK_SECRET`. Until they exist, those routes answer 503 "missing … setting".
 - Optional: `META_APP_SECRET`, if webhook deliveries fail with "Invalid signature".
 
 **Deploy:** `npx supabase functions deploy api --use-api` (bundles on Supabase's servers, no Docker
@@ -137,7 +138,7 @@ routes check the user's session themselves.
 - `prune-comment-claims` clears old claim records daily.
 
 **Tests:** `npm run test:functions` (needs Deno), or with Docker:
-`docker run --rm -v "$PWD":/app -w /app denoland/deno deno test --config supabase/functions/api/deno.json supabase/functions/tests`.
+`docker run --rm -v "$PWD":/app -w /app denoland/deno deno test --allow-env --config supabase/functions/api/deno.json supabase/functions/tests`.
 
 **Meta app** (needed before real accounts can connect):
 1. At developers.facebook.com, create a Business app with the Instagram use case.
@@ -173,8 +174,8 @@ user subscribes. Paid plans bill **monthly or annually** (annual = 2 months free
 
 Limits live in `src/data/plans.ts` (app) and `supabase/migrations` (server) — keep them in
 sync. The database enforces them itself: `enforce_account_limit` blocks extra accounts, and
-the moderation backend must call `consume_comment_check(user_id)` before checking each
-comment (it atomically spends one free check, and always allows paid plans). Paid-only
+the moderation backend takes each comment on with `claim_comment()`, which atomically spends
+one free check unless `is_paying()`: a paid plan, or a plan chosen during the trial. Paid-only
 rules use `effective_plan()`. When a plan lapses, the oldest accounts within the new limit
 keep being moderated.
 
@@ -183,12 +184,77 @@ keep being moderated.
   Stripe can't process PKR/local wallets, which is why PK routes here. Needs a backend
   route `POST /billing/safepay/session` that uses the Safepay **secret** key to create a
   checkout session and returns `{ checkoutUrl }`.
-- **Rest of world → Stripe** (`src/lib/billing.ts`): PaymentSheet via
-  `@stripe/stripe-react-native`. Needs `POST /billing/subscribe` to create the
-  Customer + Subscription (with trial) server-side and return the PaymentSheet params.
+- **Rest of world → Stripe** (`src/lib/billing.ts`): Stripe's payment sheet
+  (`@stripe/stripe-react-native`), backed by the routes below. Built and tested; waiting on a
+  Stripe account.
 
 `src/lib/billing.ts#startSubscription` routes to the right provider by
 `region.provider`. To add a market, add an entry to `REGIONS` in `pricing.ts`.
+
+### Stripe
+
+Stripe is the source of truth. The backend (`supabase/functions/api/billing.ts`) copies the
+user's current subscription onto their profile (`billing_*` columns, via `apply_billing()`)
+after every action and on every webhook, always re-reading it from Stripe, so late or
+out-of-order webhooks can't leave an old state behind. The app only reads it, live, through
+Realtime.
+
+| Route | Does |
+|-------|------|
+| `POST /billing/subscribe` `{ planId, interval }` | new subscription → returns what the payment sheet needs; an existing one → switches price or takes a cancellation back |
+| `POST /billing/sync` | re-reads the subscription (the app calls it when the payment sheet closes) |
+| `POST /billing/cancel` | ends it after the paid period (right away if chosen during the trial) |
+| `POST /billing/portal` `{ returnUrl }` | Stripe's page for the card on file and invoices |
+| `GET /billing/return` | sends the browser from that page back to the app |
+| `POST /webhooks/stripe` | `customer.subscription.*` and `setup_intent.succeeded` |
+
+How it behaves:
+- **During the trial**, choosing a plan saves a card and sets the first charge for the moment
+  the trial ends; the Plus trial carries on until then and comments stop counting against the
+  free checks. If Stripe hasn't reported that first charge yet, the chosen plan holds for up
+  to 3 days instead of dropping to Free.
+- **After the trial**, the first period is paid in the payment sheet.
+- **Switching plans** charges or credits the difference right away. If the bank declines, the
+  plan stays as it was.
+- **A failed renewal** (`past_due`) keeps the plan on while Stripe retries, and Settings asks for a
+  new card. When the retries run out, the subscription ends and the user is on Free.
+- **Cancelling** keeps the plan until the end of the paid period; choosing it again takes the
+  cancellation back.
+- **One card per user**, kept on the Stripe customer. Renewals and the first charge after a
+  trial go to it, and Stripe's billing page changes it. (Stripe first keeps the card on the
+  subscription itself, where it would win over a card changed on that page, so `cardOnFile()`
+  moves it.)
+
+The Stripe API version is pinned in `stripe.ts` (`2025-03-31.basil`).
+
+**To set up** (with a Stripe account):
+1. Products → create Solo and Plus, each with a monthly and a yearly USD price. Give the prices
+   the lookup keys `toxoff_solo_monthly`, `toxoff_solo_annual`, `toxoff_plus_monthly` and
+   `toxoff_plus_annual`. The backend finds prices by these keys; the app never names a price.
+2. Developers → Webhooks → add the endpoint
+   `https://svkdtymwerqjzauvsnbf.supabase.co/functions/v1/api/webhooks/stripe` with the events
+   `customer.subscription.created`, `.updated`, `.deleted`, `.paused`, `.resumed` and
+   `setup_intent.succeeded`.
+3. Settings → Billing → Customer portal: allow updating the payment method and viewing invoices,
+   and save. Leave plan switching off: the app does that (and the portal would end a trial early).
+4. `npx supabase secrets set STRIPE_SECRET_KEY=sk_… STRIPE_WEBHOOK_SECRET=whsec_…`, and put
+   the publishable key in `.env` as `EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY`.
+5. Test with card `4242 4242 4242 4242` (any future date and CVC); `4000 0025 0000 3155`
+   asks for bank confirmation (3-D Secure).
+
+For the store build (can't be tried in Expo Go):
+- Apple Pay and Google Pay need a development build with the merchant ID (`app.json`), an Apple
+  Pay certificate in Stripe, and the `applePay` / `googlePay` options in `initPaymentSheet`
+  (recurring Apple Pay also wants a recurring cart item).
+- Banks that confirm payments on a web page need `urlScheme` on `StripeProvider` and `returnURL`
+  in `initPaymentSheet`, with the return link handled so the router doesn't open it as a screen.
+- A bank that asks to confirm every payment can't switch plans yet (the switch is refused rather
+  than left waiting). Stripe's `pending_if_incomplete` plus a confirmation step in the app would
+  fix that.
+
+**Before App Store / Play submission:** Apple (rule 3.1.1) and Google Play require their own
+in-app purchase for digital subscriptions. Account deletion must also cancel the Stripe
+subscription.
 
 ---
 

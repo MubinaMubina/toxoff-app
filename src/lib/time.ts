@@ -24,6 +24,13 @@ export function fullTimestamp(iso: string): string {
   });
 }
 
+/** "Sep 20", or "Sep 20, 2027" when it isn't this year. */
+export function shortDate(iso: string): string {
+  const d = new Date(iso);
+  const otherYear = d.getFullYear() !== new Date().getFullYear();
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', ...(otherYear && { year: 'numeric' }) });
+}
+
 /** Blur a username for the log: keep first 2 chars, mask the rest. */
 export function blurUsername(username: string): string {
   const u = username.replace(/^@/, '');

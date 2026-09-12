@@ -1,6 +1,7 @@
 // Unit tests for the api function's pure parts. Run:
-//   deno test --config supabase/functions/api/deno.json supabase/functions/tests
-import { assert, assertEquals, assertRejects } from '@std/assert';
+//   deno test --allow-env --config supabase/functions/api/deno.json supabase/functions/tests
+import { assert, assertEquals, assertRejects, assertThrows } from '@std/assert';
+import { billingState, lookupKey, planOfPrice } from '../api/billing.ts';
 import { ClassifierError, classify, spamScore } from '../api/classifier.ts';
 import { safeEqual, seal, unseal, verifyHmacSha256 } from '../api/crypto.ts';
 import {
@@ -11,6 +12,15 @@ import {
   setCommentHidden,
 } from '../api/instagram.ts';
 import { containsTerm, decide, type FilterSettings } from '../api/moderation.ts';
+import {
+  createCustomer,
+  formEncode,
+  pricesByLookupKey,
+  StripeError,
+  type Subscription,
+  updateSubscription,
+  verifyWebhook,
+} from '../api/stripe.ts';
 
 const FILTERS: FilterSettings = {
   sensitivity: 'medium',
@@ -226,4 +236,121 @@ Deno.test('Instagram errors: expired token, deleted comment, flat OAuth errors',
   } finally {
     stub.restore();
   }
+});
+
+// ---------- Stripe ----------
+
+async function stripeSignature(secret: string, body: string, timestamp = Math.floor(Date.now() / 1000)) {
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const mac = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(`${timestamp}.${body}`));
+  return { timestamp, hex: [...new Uint8Array(mac)].map((b) => b.toString(16).padStart(2, '0')).join('') };
+}
+
+function subscription(overrides: Partial<Subscription> = {}): Subscription {
+  return {
+    id: 'sub_1',
+    customer: 'cus_1',
+    status: 'active',
+    cancel_at_period_end: false,
+    cancel_at: null,
+    trial_end: null,
+    default_payment_method: 'pm_1',
+    pending_setup_intent: null,
+    items: { data: [{ id: 'si_1', price: { id: 'price_1', lookup_key: 'toxoff_solo_monthly' }, current_period_end: 1_800_000_000 }] },
+    ...overrides,
+  };
+}
+
+Deno.test('formEncode: Stripe-style nested objects and arrays, nulls left out', () => {
+  const form = formEncode({
+    customer: 'cus_1',
+    items: [{ price: 'price_1' }],
+    payment_settings: { payment_method_types: ['card'], save_default_payment_method: 'on_subscription' },
+    trial_end: undefined,
+    trial_settings: null,
+    cancel_at_period_end: false,
+    expand: ['latest_invoice.confirmation_secret', 'pending_setup_intent'],
+  });
+  assertEquals([...form], [
+    ['customer', 'cus_1'],
+    ['items[0][price]', 'price_1'],
+    ['payment_settings[payment_method_types][0]', 'card'],
+    ['payment_settings[save_default_payment_method]', 'on_subscription'],
+    ['cancel_at_period_end', 'false'],
+    ['expand[0]', 'latest_invoice.confirmation_secret'],
+    ['expand[1]', 'pending_setup_intent'],
+  ]);
+});
+
+Deno.test('verifyWebhook: accepts Stripe signatures, rejects forgeries, tampering and replays', async () => {
+  const body = JSON.stringify({ id: 'evt_1', type: 'customer.subscription.updated', data: { object: { id: 'sub_1', object: 'subscription', customer: 'cus_1' } } });
+  const bytes = () => new TextEncoder().encode(body).buffer;
+  const { timestamp, hex } = await stripeSignature('whsec_test', body);
+  const event = await verifyWebhook(bytes(), `t=${timestamp},v1=${hex}`, 'whsec_test');
+  assertEquals(event?.data.object.id, 'sub_1');
+  // During a secret rotation Stripe sends one v1 per secret; any match will do.
+  assert(await verifyWebhook(bytes(), `t=${timestamp},v1=${'0'.repeat(64)},v1=${hex}`, 'whsec_test'));
+  assertEquals(await verifyWebhook(bytes(), `t=${timestamp},v1=${hex}`, 'whsec_other'), null);
+  assertEquals(await verifyWebhook(new TextEncoder().encode(body.replace('sub_1', 'sub_2')).buffer, `t=${timestamp},v1=${hex}`, 'whsec_test'), null);
+  assertEquals(await verifyWebhook(bytes(), `t=${timestamp + 1},v1=${hex}`, 'whsec_test'), null);
+  const old = await stripeSignature('whsec_test', body, timestamp - 301);
+  assertEquals(await verifyWebhook(bytes(), `t=${old.timestamp},v1=${old.hex}`, 'whsec_test'), null);
+  assertEquals(await verifyWebhook(bytes(), `t=${timestamp},v0=${hex}`, 'whsec_test'), null);
+  assertEquals(await verifyWebhook(bytes(), null, 'whsec_test'), null);
+  assertEquals(await verifyWebhook(bytes(), 'garbage', 'whsec_test'), null);
+});
+
+Deno.test('Stripe requests: pinned version, secret key, idempotency, query for GET, errors', async () => {
+  Deno.env.set('STRIPE_SECRET_KEY', 'sk_test_unit');
+  const stub = stubFetch((url) =>
+    url.pathname === '/v1/customers'
+      ? Response.json({ id: 'cus_1' })
+      : url.pathname === '/v1/prices'
+        ? Response.json({ data: [{ id: 'price_1', lookup_key: 'toxoff_solo_monthly' }] })
+        : Response.json({ error: { message: 'Your card was declined.', code: 'card_declined' } }, { status: 402 })
+  );
+  try {
+    assertEquals((await createCustomer('user-1', 'a@b.co')).id, 'cus_1');
+    const [customer] = stub.calls;
+    const headers = new Headers(customer.init?.headers);
+    assertEquals(headers.get('Stripe-Version'), '2025-03-31.basil');
+    assertEquals(headers.get('Authorization'), 'Bearer sk_test_unit');
+    assertEquals(headers.get('Idempotency-Key'), 'toxoff-customer-user-1');
+    assertEquals(new URLSearchParams(String(customer.init?.body)).get('metadata[user_id]'), 'user-1');
+
+    await pricesByLookupKey(['toxoff_solo_monthly']);
+    assertEquals([stub.calls[1].init?.method, stub.calls[1].init?.body, stub.calls[1].url.searchParams.get('lookup_keys[0]')], ['GET', undefined, 'toxoff_solo_monthly']);
+
+    const error = await assertRejects(() => updateSubscription('sub_1', { items: [{ id: 'si_1', price: 'price_2' }] }), StripeError);
+    assertEquals([error.status, error.code, error.message], [402, 'card_declined', 'Your card was declined.']);
+  } finally {
+    stub.restore();
+    Deno.env.delete('STRIPE_SECRET_KEY');
+  }
+});
+
+Deno.test('planOfPrice reads toxoff lookup keys only', () => {
+  assertEquals(planOfPrice({ id: 'p', lookup_key: lookupKey('plus', 'annual') }), { plan: 'plus', interval: 'annual' });
+  assertEquals(planOfPrice({ id: 'p', lookup_key: 'toxoff_gold_monthly' }), null);
+  assertEquals(planOfPrice({ id: 'p', lookup_key: null }), null);
+});
+
+Deno.test('billingState: Stripe statuses as the app sees them', () => {
+  const at = (unix: number) => new Date(unix * 1000).toISOString();
+  assertEquals(billingState(subscription(), false), { status: 'active', plan: 'solo', interval: 'monthly', periodEnd: at(1_800_000_000), cancelAtPeriodEnd: false });
+  assertEquals(billingState(subscription({ status: 'past_due' }), false).status, 'past_due');
+  // Chosen during the trial: only counts once there's a card, and the period ends with the trial.
+  const trialing = subscription({ status: 'trialing', trial_end: 1_700_000_000 });
+  assertEquals(billingState(trialing, true), { status: 'scheduled', plan: 'solo', interval: 'monthly', periodEnd: at(1_700_000_000), cancelAtPeriodEnd: false });
+  assertEquals(billingState(trialing, false).status, 'none');
+  for (const status of ['incomplete', 'incomplete_expired', 'canceled', 'unpaid', 'paused'] as const) {
+    assertEquals(billingState(subscription({ status }), true).status, 'none', status);
+  }
+  // Cancelling: at the period end, or on a set date.
+  assertEquals(billingState(subscription({ cancel_at_period_end: true, cancel_at: 1_800_000_000 }), false).cancelAtPeriodEnd, true);
+  assertEquals(billingState(subscription({ cancel_at: 1_750_000_000 }), false), { status: 'active', plan: 'solo', interval: 'monthly', periodEnd: at(1_750_000_000), cancelAtPeriodEnd: true });
+  // Older API versions keep the period end on the subscription itself.
+  const legacy = subscription({ current_period_end: 1_790_000_000, items: { data: [{ id: 'si_1', price: { id: 'price_1', lookup_key: 'toxoff_plus_annual' } }] } });
+  assertEquals(billingState(legacy, false), { status: 'active', plan: 'plus', interval: 'annual', periodEnd: at(1_790_000_000), cancelAtPeriodEnd: false });
+  assertThrows(() => billingState(subscription({ items: { data: [{ id: 'si_1', price: { id: 'price_x', lookup_key: null } }] } }), false));
 });

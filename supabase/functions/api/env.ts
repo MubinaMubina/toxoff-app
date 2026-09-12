@@ -18,4 +18,6 @@ export const env = {
   // Encrypts the OAuth state and the half-finished connection handed back to the app.
   connectSecret: () => setting('CONNECT_SECRET'),
   cronSecret: () => setting('CRON_SECRET'),
+  stripeSecretKey: () => setting('STRIPE_SECRET_KEY'),
+  stripeWebhookSecret: () => setting('STRIPE_WEBHOOK_SECRET'),
 };

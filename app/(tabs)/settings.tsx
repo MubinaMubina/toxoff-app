@@ -20,19 +20,94 @@ import { useAuth } from '../../src/context/AuthContext';
 import { useModeration } from '../../src/context/ModerationContext';
 import { useRegion } from '../../src/context/RegionContext';
 import { getPlan } from '../../src/data/plans';
+import { cancelSubscription, openBillingPortal, resumeSubscription } from '../../src/lib/billing';
 import { registerForPushNotifications } from '../../src/lib/notifications';
-import { fullTimestamp } from '../../src/lib/time';
+import { shortDate } from '../../src/lib/time';
 import { useTheme } from '../../src/theme/ThemeContext';
 
 export default function Settings() {
   const { colors, font, pref, setPref, spacing } = useTheme();
   const router = useRouter();
-  const { user, subscription, signOut } = useAuth();
+  const { user, subscription, signOut, refreshSubscription, setDemoBilling } = useAuth();
   const { accounts, notificationsEnabled, setNotificationsEnabled, savePushToken } = useModeration();
   const { region, chooseRegion } = useRegion();
 
   const [savingPush, setSavingPush] = useState(false);
+  const [billingBusy, setBillingBusy] = useState(false);
   const plan = getPlan(subscription.plan);
+  const billing = subscription.billing;
+  const billingPlan = billing ? getPlan(billing.plan).name : '';
+
+  const planDetail =
+    billing?.status === 'past_due'
+      ? 'Payment failed. Update your card below.'
+      : subscription.status === 'trialing' && subscription.trialEndsAt
+        ? `Trial ends ${shortDate(subscription.trialEndsAt)}, then ${billing?.status === 'scheduled' ? billingPlan : 'Free'}`
+        : billing?.periodEnd
+          ? billing.status === 'scheduled'
+            ? `Starts ${shortDate(billing.periodEnd)}`
+            : billing.cancelAtPeriodEnd
+              ? `Ends ${shortDate(billing.periodEnd)}`
+              : `Renews ${shortDate(billing.periodEnd)} · billed ${billing.interval === 'annual' ? 'yearly' : 'monthly'}`
+          : subscription.status === 'free'
+            ? 'Upgrade for unlimited moderation'
+            : 'Manage your plan & billing';
+
+  // Billing actions talk to Stripe through the backend; in demo mode they change local state only.
+  const runBilling = async (action: () => Promise<void>) => {
+    setBillingBusy(true);
+    try {
+      await action();
+    } catch (e: any) {
+      Alert.alert('Something went wrong', e?.message ?? 'Please try again.');
+    } finally {
+      setBillingBusy(false);
+    }
+  };
+
+  const manageBilling = () =>
+    runBilling(async () => {
+      if ((await openBillingPortal()).status === 'demo') {
+        Alert.alert('Demo mode', 'Connect Stripe to update your card and see invoices.');
+        return;
+      }
+      await refreshSubscription();
+    });
+
+  const confirmCancel = () => {
+    if (!billing) return;
+    Alert.alert(
+      `Cancel ${billingPlan}?`,
+      billing.status === 'scheduled'
+        ? `You won’t be charged. Your free trial continues until it ends, then you’ll be on Free.`
+        : `You’ll keep ${billingPlan} until ${billing.periodEnd ? shortDate(billing.periodEnd) : 'the end of this period'}. After that you’ll be on Free.`,
+      [
+        { text: `Keep ${billingPlan}`, style: 'cancel' },
+        {
+          text: 'Cancel subscription',
+          style: 'destructive',
+          onPress: () =>
+            runBilling(async () => {
+              if ((await cancelSubscription()).status === 'demo') {
+                setDemoBilling(billing.status === 'scheduled' ? null : { ...billing, cancelAtPeriodEnd: true });
+                return;
+              }
+              await refreshSubscription();
+            }),
+        },
+      ]
+    );
+  };
+
+  const resume = () =>
+    runBilling(async () => {
+      if (!billing) return;
+      if ((await resumeSubscription(billing.plan, billing.interval)).status === 'demo') {
+        setDemoBilling({ ...billing, cancelAtPeriodEnd: false });
+        return;
+      }
+      await refreshSubscription();
+    });
 
   const togglePush = async (value: boolean) => {
     if (!value) {
@@ -114,18 +189,55 @@ export default function Settings() {
                       <Badge label="Trial" color={colors.success} bg={colors.successSoft} />
                     )}
                   </View>
-                  <Text style={{ color: colors.textMuted, fontSize: font.size.sm, marginTop: 3 }}>
-                    {subscription.status === 'trialing' && subscription.trialEndsAt
-                      ? `Trial ends ${fullTimestamp(subscription.trialEndsAt).split(',')[0]}, then Free`
-                      : subscription.status === 'free'
-                        ? 'Upgrade for unlimited moderation'
-                        : 'Manage your plan & billing'}
+                  <Text
+                    style={{
+                      color: billing?.status === 'past_due' ? colors.warning : colors.textMuted,
+                      fontSize: font.size.sm,
+                      marginTop: 3,
+                    }}
+                  >
+                    {planDetail}
                   </Text>
                 </View>
                 <Chevron />
               </View>
             </Card>
           </Pressable>
+
+          {billing && (
+            <Card padded={false} style={{ marginTop: spacing.md, opacity: billingBusy ? 0.6 : 1 }}>
+              <Pressable onPress={manageBilling} disabled={billingBusy} style={ROW}>
+                <RowIcon>
+                  <Ionicons name="card-outline" size={20} color={colors.text} />
+                </RowIcon>
+                <Text style={{ color: colors.text, fontSize: font.size.md, flex: 1, fontWeight: font.weight.medium }}>
+                  Manage billing
+                </Text>
+                <Text style={{ color: colors.textMuted, fontSize: font.size.sm }}>Card, invoices</Text>
+                <Chevron />
+              </Pressable>
+              <RowSeparator />
+              {billing.cancelAtPeriodEnd ? (
+                <Pressable onPress={resume} disabled={billingBusy} style={ROW}>
+                  <RowIcon>
+                    <Ionicons name="refresh-outline" size={20} color={colors.primary} />
+                  </RowIcon>
+                  <Text style={{ color: colors.primary, fontSize: font.size.md, fontWeight: font.weight.medium }}>
+                    Keep {billingPlan}
+                  </Text>
+                </Pressable>
+              ) : (
+                <Pressable onPress={confirmCancel} disabled={billingBusy} style={ROW}>
+                  <RowIcon>
+                    <Ionicons name="close-circle-outline" size={20} color={colors.danger} />
+                  </RowIcon>
+                  <Text style={{ color: colors.danger, fontSize: font.size.md, fontWeight: font.weight.medium }}>
+                    Cancel subscription
+                  </Text>
+                </Pressable>
+              )}
+            </Card>
+          )}
         </View>
 
         {/* Connected accounts */}

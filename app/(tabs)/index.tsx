@@ -108,7 +108,8 @@ export default function Dashboard() {
     freeCommentsUsed,
   } = useModeration();
   const plan = getPlan(subscription.plan);
-  const paid = subscription.status === 'active';
+  // Includes a plan chosen during the trial: from then on comments aren't counted.
+  const paid = subscription.paying;
   const outOfFreeChecks = !paid && freeCommentsUsed >= FREE_COMMENT_ALLOWANCE;
 
   // Register for push alerts once if the user has them enabled.
