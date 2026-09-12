@@ -21,7 +21,7 @@ export function RemovedCommentRow({ comment }: { comment: RemovedComment }) {
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 7 }}>
           <ReasonBadge reason={comment.reason} />
           <Text style={{ color: colors.textFaint, fontSize: font.size.xs }}>
-            {comment.language} · {timeAgo(comment.createdAt)}
+            {[comment.language, timeAgo(comment.createdAt)].filter(Boolean).join(' · ')}
           </Text>
         </View>
       </View>

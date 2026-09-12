@@ -373,6 +373,11 @@ authorization_url_path = "/oauth/consent"
 # Allow dynamic client registration
 allow_dynamic_registration = false
 
+[functions.api]
+# Meta's webhooks and the OAuth callback can't send a Supabase token. App routes check the
+# user's session in code (supabase/functions/api/db.ts#requireUser).
+verify_jwt = false
+
 [edge_runtime]
 enabled = true
 # Supported request policies: `oneshot`, `per_worker`.

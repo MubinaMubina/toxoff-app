@@ -17,7 +17,7 @@ export type RemovedComment = {
   text: string;
   reason: ModerationReason;
   confidence: number; // 0..1 from the AI classifier
-  language: string;
+  language: string | null; // null when the classifier doesn't report it
   postRef: string;
   createdAt: string; // ISO timestamp
   restored?: boolean;

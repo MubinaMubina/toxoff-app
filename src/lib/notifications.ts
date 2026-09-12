@@ -1,8 +1,9 @@
 import Constants from 'expo-constants';
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
-import { RemovedComment } from '../types';
 
+// "Comment hidden" alerts are sent by the backend (supabase/functions/api/pipeline.ts) as Expo
+// pushes to profiles.push_token; this shows them while the app is open too.
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,
@@ -12,15 +13,6 @@ Notifications.setNotificationHandler({
     shouldShowList: true,
   }),
 });
-
-const REASON_LABEL: Record<string, string> = {
-  hate_speech: 'hate speech',
-  harassment: 'harassment',
-  slurs: 'a slur',
-  spam: 'spam',
-  self_harm: 'self-harm content',
-  toxicity: 'toxicity',
-};
 
 /** Ask for push permission and (on device) return an Expo push token. */
 export async function registerForPushNotifications(): Promise<string | null> {
@@ -51,17 +43,4 @@ export async function registerForPushNotifications(): Promise<string | null> {
   } catch {
     return null;
   }
-}
-
-/** Local alert fired when moderation removes a comment (mirrors the server push). */
-export async function notifyCommentRemoved(c: RemovedComment) {
-  const platform = c.platform === 'instagram' ? 'Instagram' : 'TikTok';
-  await Notifications.scheduleNotificationAsync({
-    content: {
-      title: `Comment removed on ${platform}`,
-      body: `Flagged for ${REASON_LABEL[c.reason] ?? 'a policy violation'}: "${c.text.slice(0, 60)}"`,
-      data: { commentId: c.id },
-    },
-    trigger: null,
-  });
 }

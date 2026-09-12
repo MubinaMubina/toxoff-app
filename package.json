@@ -9,6 +9,7 @@
     "web": "expo start --web",
     "lint": "expo lint",
     "typecheck": "tsc --noEmit",
+    "test:functions": "deno test --config supabase/functions/api/deno.json supabase/functions/tests",
     "gen:assets": "node scripts/generate-assets.mjs"
   },
   "dependencies": {

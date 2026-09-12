@@ -1,3 +1,4 @@
+import * as AuthSession from 'expo-auth-session';
 import * as WebBrowser from 'expo-web-browser';
 import React, {
   createContext,
@@ -86,8 +87,6 @@ const ACCOUNT_COLUMNS = 'id, platform, handle, connected, paused';
 const LOG_COLUMNS =
   'id, platform, username, text, reason, confidence, language, post_ref, restored, created_at';
 const LOG_LIMIT = 200;
-// The backend's OAuth callback redirects here when the platform consent screen finishes.
-const CONNECT_RETURN_URL = 'toxoff://connect-accounts';
 
 const ZERO_METRICS: Metrics = { today: 0, week: 0, month: 0 };
 const EMPTY_FILTERS: FilterSettings = {
@@ -112,7 +111,7 @@ const toComment = (r: LogRow): RemovedComment => ({
   text: r.text,
   reason: r.reason,
   confidence: r.confidence,
-  language: r.language ?? 'Unknown',
+  language: r.language,
   postRef: r.post_ref ?? '—',
   createdAt: r.created_at,
   restored: r.restored ?? false,
@@ -307,11 +306,18 @@ export function ModerationProvider({ children }: { children: React.ReactNode }) 
         ]);
         return;
       }
-      const { url } = await apiPost<{ url: string }>('/connect/start', { platform });
-      const result = await WebBrowser.openAuthSessionAsync(url, CONNECT_RETURN_URL);
+      // The backend's OAuth callback sends the browser back here (Expo Go uses an exp:// URL).
+      const returnUrl = AuthSession.makeRedirectUri({ scheme: 'toxoff', path: 'connect-accounts' });
+      const { url } = await apiPost<{ url: string }>('/connect/start', { platform, returnUrl });
+      const result = await WebBrowser.openAuthSessionAsync(url, returnUrl);
       if (result.type !== 'success') return;
-      const failure = new URL(result.url).searchParams.get('error');
+      const params = new URL(result.url).searchParams;
+      const failure = params.get('error');
       if (failure) throw new Error(failure);
+      const pending = params.get('pending');
+      if (!pending) return; // cancelled on the platform's consent screen
+      // Linking happens with this session, so only the person who started can finish.
+      await apiPost('/connect/finish', { pending });
       await reloadAccounts();
     },
     [userId, reloadAccounts]

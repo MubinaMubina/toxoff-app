@@ -10,9 +10,11 @@ import { createSafepayCheckout } from './safepay';
  * - Everywhere else (region.provider === 'stripe') → Stripe PaymentSheet, created
  *   server-side with the 7-day trial. Never put the Stripe secret key in the app.
  *
- * Both providers need a backend; with no EXPO_PUBLIC_API_BASE_URL configured the
- * app runs in demo mode and `startSubscription` resolves to { status: 'demo' }.
+ * Both providers need a backend route and the provider's publishable key. Until both are
+ * configured, that provider runs in demo mode and `startSubscription` resolves to { status: 'demo' }.
  */
+
+const stripeConfigured = isApiConfigured && Boolean(process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY);
 
 export type SubscriptionParams = {
   planId: PaidPlanId;
@@ -27,7 +29,7 @@ export type SubscriptionResult =
   | { status: 'cancelled' };
 
 async function startStripe(params: SubscriptionParams): Promise<SubscriptionResult> {
-  if (!isApiConfigured) return { status: 'demo' };
+  if (!stripeConfigured) return { status: 'demo' };
 
   // The backend maps plan + interval to its Stripe price; the app never picks prices.
   await apiPost('/billing/subscribe', { planId: params.planId, interval: params.interval });

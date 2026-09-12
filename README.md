@@ -45,10 +45,12 @@ src/
   theme/                   # colors + light/dark ThemeContext
   context/                 # Auth, Moderation, Region providers
   data/                    # plans, pricing (region table), mock data
-  lib/                     # supabase, billing, safepay, moderation, notifications, time
+  lib/                     # supabase, api, billing, safepay, notifications, time
   components/              # Button, Card, Badge, LogRow, etc.
 supabase/config.toml       # Supabase CLI config (auth settings, redirect URLs)
-supabase/migrations/       # database schema: tables, RLS, triggers, plan limits
+supabase/migrations/       # database schema: tables, RLS, triggers, plan limits, cron jobs
+supabase/functions/api/    # backend: Instagram connect, comment webhooks, AI check, restores
+supabase/functions/tests/  # backend unit tests (Deno)
 scripts/generate-assets.mjs# placeholder icon/splash generator
 ```
 
@@ -83,16 +85,71 @@ linked to it with the Supabase CLI. The database password is in the macOS Keycha
 - Upgrade the project to **Pro** before launch — free projects pause after a week idle.
 
 ### AI moderation
-`src/lib/moderation.ts` holds the decision logic (sensitivity threshold + enabled
-categories + keyword/blocked-user rules). Point `classifyComment` at your classifier
-(OpenAI moderation API or a custom multilingual endpoint) via
-`EXPO_PUBLIC_API_BASE_URL/moderate`. The same `decide()` function runs on mock and live
-data.
+Comments are checked by the backend, not the app. `supabase/functions/api/classifier.ts` calls
+OpenAI's moderation endpoint (free, needs an `OPENAI_API_KEY`) and adds a spam score from simple
+signals (links, "DM me", phone numbers), since OpenAI doesn't detect spam or language.
+`moderation.ts` turns the scores into a decision with the user's sensitivity, categories, keyword
+blocklist and blocked users (keywords match whole words). To move to a paid classifier later
+(e.g. Claude Haiku, for Roman Urdu and context), replace `classify()`; the rest only sees scores.
 
 ### Instagram / TikTok
-`app/connect-accounts.tsx` contains the OAuth flow placeholder. Swap the simulated
-connect for the real consent screen (expo-web-browser) and store the returned tokens in
-`public.accounts`.
+Instagram uses the Instagram API with Instagram Login (Business and Creator accounts). Connect
+opens Instagram's consent screen through the backend, which keeps the token server-side
+(`account_tokens`) and subscribes the account to comment webhooks. Toxic comments are **hidden**,
+not deleted, so Restore can bring them back. TikTok isn't built yet (connect answers "coming soon").
+
+---
+
+## Moderation backend
+
+One Supabase Edge Function, `supabase/functions/api`, deployed at
+`https://svkdtymwerqjzauvsnbf.supabase.co/functions/v1/api` (the app's `EXPO_PUBLIC_API_BASE_URL`).
+
+| Route | Called by | Does |
+|-------|-----------|------|
+| `POST /connect/start` | app | returns Instagram's consent URL |
+| `GET /connect/instagram/callback` | Instagram | swaps the code for a 60-day token; hands it back to the app sealed |
+| `POST /connect/finish` | app | links the account to the signed-in user (plan limit applies) |
+| `POST /comments/restore` | app | un-hides the comment on Instagram, marks the log row restored |
+| `GET`/`POST /webhooks/instagram` | Meta | webhook check / new comments: check, hide, log, push |
+| `POST /cron/refresh-tokens` | daily job | extends Instagram tokens before they expire |
+
+For each comment, `pipeline.ts` skips paused, disconnected and over-the-limit accounts (the oldest
+accounts within the plan are moderated). It then takes the comment on once with `claim_comment()`,
+which spends a free check; repeat deliveries are free. Then it runs the classifier, hides the
+comment, logs it and sends the push. If something fails temporarily (OpenAI or Instagram down),
+the check is given back and the webhook returns an error, so Meta delivers the comment again.
+
+**Secrets** (`npx supabase secrets set`, never in the app):
+- `CONNECT_SECRET`, `CRON_SECRET`, `INSTAGRAM_WEBHOOK_VERIFY_TOKEN` are set. The verify token is
+  also in the Keychain (`supabase-toxoff-ig-verify-token`) for Meta's dashboard.
+- To add: `INSTAGRAM_APP_ID`, `INSTAGRAM_APP_SECRET`, `OPENAI_API_KEY`. Until they exist, those
+  routes answer 503 "missing … setting".
+- Optional: `META_APP_SECRET`, if webhook deliveries fail with "Invalid signature".
+
+**Deploy:** `npx supabase functions deploy api --use-api` (bundles on Supabase's servers, no Docker
+needed). `verify_jwt` is off in `config.toml` because Meta can't send a Supabase token; the app
+routes check the user's session themselves.
+
+**Scheduled jobs** (pg_cron, created by the migrations):
+- `refresh-instagram-tokens` runs daily at 04:00 UTC. It reads the function URL and `CRON_SECRET`
+  from Vault (`api_url`, `cron_secret`).
+- `prune-comment-claims` clears old claim records daily.
+
+**Tests:** `npm run test:functions` (needs Deno), or with Docker:
+`docker run --rm -v "$PWD":/app -w /app denoland/deno deno test --config supabase/functions/api/deno.json supabase/functions/tests`.
+
+**Meta app** (needed before real accounts can connect):
+1. At developers.facebook.com, create a Business app with the Instagram use case.
+2. Instagram → API setup with Instagram login: put the Instagram app ID and secret in the secrets above.
+3. Business login settings → OAuth redirect URI:
+   `https://svkdtymwerqjzauvsnbf.supabase.co/functions/v1/api/connect/instagram/callback`
+4. Webhooks: set the callback URL to
+   `https://svkdtymwerqjzauvsnbf.supabase.co/functions/v1/api/webhooks/instagram`, use the
+   verify token from the Keychain, and subscribe to `comments`.
+5. Add your own Instagram professional account as a tester to try it. Other creators can only
+   connect after App Review approves `instagram_business_basic` and
+   `instagram_business_manage_comments`.
 
 ---
 
@@ -137,11 +194,11 @@ keep being moderated.
 
 ## Push notifications
 
-`src/lib/notifications.ts` registers an Expo push token and fires a local alert when a
-comment is removed (`notifyCommentRemoved`). The Dashboard registers on mount; the
-Settings toggle requests/relinquishes permission. For server-sent pushes, store the
-token in `profiles.push_token` and send via the Expo Push API from your moderation
-backend.
+When the backend hides a comment, it sends an Expo push to `profiles.push_token` if notifications
+are on. The push says who wrote the comment and why it was hidden, but leaves the comment text out
+on purpose. `src/lib/notifications.ts` registers the token: the Dashboard does it on mount, and the
+Settings toggle requests or gives up permission. Tokens need a real EAS project id: `eas init`
+replaces the placeholder `extra.eas.projectId` in `app.json`.
 
 ---
 
@@ -184,5 +241,6 @@ Also replace the placeholder `extra.eas.projectId` in `app.json` (set automatica
 | `npm start` | Start the Expo dev server |
 | `npm run ios` / `android` | Open on a simulator/emulator |
 | `npm run typecheck` | `tsc --noEmit` (strict mode) |
+| `npm run test:functions` | Backend unit tests (needs Deno) |
 | `npm run lint` | Expo lint |
 | `npm run gen:assets` | Regenerate placeholder icon/splash PNGs |

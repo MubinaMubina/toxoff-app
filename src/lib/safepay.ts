@@ -30,11 +30,13 @@ export type SafepayResult =
 
 const RETURN_URL = 'toxoff://billing/safepay/return';
 
+const safepayConfigured = isApiConfigured && Boolean(process.env.EXPO_PUBLIC_SAFEPAY_PUBLIC_KEY);
+
 export async function createSafepayCheckout(
   params: SafepayParams
 ): Promise<SafepayResult> {
-  if (!isApiConfigured) {
-    // Demo mode — no backend configured. Pretend the trial subscription was created.
+  if (!safepayConfigured) {
+    // Demo mode — Safepay isn't set up yet. Pretend the subscription was created.
     return { status: 'demo' };
   }
 

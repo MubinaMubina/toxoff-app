@@ -73,7 +73,9 @@ export function LogRow({
       {open && (
         <View style={{ marginTop: 14, paddingTop: 14, borderTopWidth: 0.5, borderTopColor: colors.border, gap: 10 }}>
           <DetailRow label="Posted on" value={comment.postRef} colors={colors} font={font} />
-          <DetailRow label="Language" value={comment.language} colors={colors} font={font} />
+          {comment.language && (
+            <DetailRow label="Language" value={comment.language} colors={colors} font={font} />
+          )}
           <DetailRow
             label="AI confidence"
             value={`${Math.round(comment.confidence * 100)}%`}
