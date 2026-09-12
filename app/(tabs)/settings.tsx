@@ -6,6 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { PlatformIcon } from '../../src/components/PlatformIcon';
 import {
   Badge,
+  Button,
   Card,
   Chevron,
   LIST_ROW,
@@ -249,24 +250,13 @@ export default function Settings() {
         </View>
 
         {/* Logout */}
-        <Pressable
+        <Button
+          label="Log out"
+          icon="log-out-outline"
+          variant="danger"
           onPress={confirmLogout}
-          style={{
-            marginTop: 24,
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 8,
-            paddingVertical: 15,
-            borderRadius: 14,
-            backgroundColor: colors.dangerSoft,
-          }}
-        >
-          <Ionicons name="log-out-outline" size={20} color={colors.danger} />
-          <Text style={{ color: colors.danger, fontSize: font.size.md, fontWeight: font.weight.semibold }}>
-            Log out
-          </Text>
-        </Pressable>
+          style={{ marginTop: spacing.xl }}
+        />
 
         <Text style={{ color: colors.textFaint, fontSize: font.size.xs, textAlign: 'center', marginTop: 18 }}>
           toxoff v1.0.0
