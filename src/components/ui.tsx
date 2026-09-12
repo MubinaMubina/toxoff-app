@@ -239,21 +239,44 @@ export function Muted({
   );
 }
 
-export function SectionLabel({ children }: { children: React.ReactNode }) {
+// A section's uppercase label, with an optional link ("Manage", "See all") on the same baseline.
+export function SectionLabel({
+  children,
+  action,
+}: {
+  children: React.ReactNode;
+  action?: { label: string; onPress: () => void };
+}) {
   const { colors, font } = useTheme();
   return (
-    <Text
+    <View
       style={{
-        color: colors.textMuted,
-        fontSize: font.size.xs,
-        fontWeight: font.weight.semibold,
-        letterSpacing: 0.6,
-        textTransform: 'uppercase',
+        flexDirection: 'row',
+        alignItems: 'baseline',
+        justifyContent: 'space-between',
         marginBottom: 10,
       }}
     >
-      {children}
-    </Text>
+      <Text
+        style={{
+          color: colors.textMuted,
+          fontSize: font.size.xs,
+          fontWeight: font.weight.semibold,
+          letterSpacing: 0.6,
+          textTransform: 'uppercase',
+        }}
+      >
+        {children}
+      </Text>
+      {action && (
+        // hitSlop brings the small link up to a 44pt tap target without moving the layout.
+        <Pressable onPress={action.onPress} hitSlop={{ top: 14, bottom: 14, left: 12, right: 12 }}>
+          <Text style={{ color: colors.primary, fontSize: font.size.sm, fontWeight: font.weight.semibold }}>
+            {action.label}
+          </Text>
+        </Pressable>
+      )}
+    </View>
   );
 }
 

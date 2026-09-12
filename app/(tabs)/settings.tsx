@@ -88,7 +88,7 @@ export default function Settings() {
         </Text>
 
         {/* Profile */}
-        <Card style={{ marginTop: 18, flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+        <Card style={{ marginTop: spacing.xl, flexDirection: 'row', alignItems: 'center', gap: 14 }}>
           <View
             style={{
               width: 54,
@@ -114,7 +114,7 @@ export default function Settings() {
         </Card>
 
         {/* Subscription */}
-        <View style={{ marginTop: 24 }}>
+        <View style={{ marginTop: spacing.xl }}>
           <SectionLabel>Subscription</SectionLabel>
           <Pressable onPress={() => router.push('/paywall')}>
             <Card>
@@ -143,7 +143,7 @@ export default function Settings() {
         </View>
 
         {/* Connected accounts */}
-        <View style={{ marginTop: 24 }}>
+        <View style={{ marginTop: spacing.xl }}>
           <SectionLabel>Connected accounts</SectionLabel>
           <Card padded={false}>
             {accounts.map((acc) => (
@@ -176,7 +176,7 @@ export default function Settings() {
         </View>
 
         {/* Preferences */}
-        <View style={{ marginTop: 24 }}>
+        <View style={{ marginTop: spacing.xl }}>
           <SectionLabel>Preferences</SectionLabel>
           <Card padded={false}>
             <View style={ROW}>
@@ -238,7 +238,7 @@ export default function Settings() {
         </View>
 
         {/* About */}
-        <View style={{ marginTop: 24 }}>
+        <View style={{ marginTop: spacing.xl }}>
           <SectionLabel>About</SectionLabel>
           <Card padded={false}>
             <LinkRow icon="document-text-outline" label="Privacy policy" />

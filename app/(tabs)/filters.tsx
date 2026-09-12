@@ -81,7 +81,7 @@ export default function Filters() {
           </Text>
 
           {/* Sensitivity */}
-          <View style={{ marginTop: 24 }}>
+          <View style={{ marginTop: spacing.xl }}>
             <SectionLabel>Sensitivity</SectionLabel>
             <Segmented<Sensitivity>
               value={filters.sensitivity}
@@ -98,7 +98,7 @@ export default function Filters() {
           </View>
 
           {/* Categories */}
-          <View style={{ marginTop: 26 }}>
+          <View style={{ marginTop: spacing.xl }}>
             <SectionLabel>Categories</SectionLabel>
             <Card padded={false}>
               {CATEGORIES.map((c, i) => (
@@ -151,7 +151,7 @@ export default function Filters() {
           </View>
 
           {/* Keyword blocklist */}
-          <View style={{ marginTop: 26 }}>
+          <View style={{ marginTop: spacing.xl }}>
             <SectionLabel>Keyword blocklist</SectionLabel>
             {!plan.keywordBlocklist ? (
               <LockedFeature
@@ -197,7 +197,7 @@ export default function Filters() {
           </View>
 
           {/* Blocked users */}
-          <View style={{ marginTop: 26 }}>
+          <View style={{ marginTop: spacing.xl }}>
             <SectionLabel>Blocked users</SectionLabel>
             {!plan.blockedUsers ? (
               <LockedFeature

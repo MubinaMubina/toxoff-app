@@ -46,12 +46,12 @@ function FreeChecksCard({
   used: number;
   onUpgrade: () => void;
 }) {
-  const { colors, font, radius } = useTheme();
+  const { colors, font, radius, spacing } = useTheme();
   const limit = FREE_COMMENT_ALLOWANCE;
   const reached = used >= limit;
   return (
-    <Pressable onPress={onUpgrade}>
-      <Card style={{ marginTop: 18 }}>
+    <Pressable onPress={onUpgrade} style={{ marginTop: spacing.xl }}>
+      <Card>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
           <Text style={{ color: colors.text, fontSize: font.size.md, fontWeight: font.weight.semibold }}>
             {title}
@@ -163,7 +163,7 @@ export default function Dashboard() {
         )}
 
         {/* Metrics */}
-        <View style={{ marginTop: 22 }}>
+        <View style={{ marginTop: spacing.xl }}>
           <SectionLabel>Comments removed</SectionLabel>
           <View style={{ flexDirection: 'row', gap: 10 }}>
             <MetricCard value={metrics.today} label="Today" accent={palette.purple} />
@@ -173,15 +173,10 @@ export default function Dashboard() {
         </View>
 
         {/* Accounts pause/resume */}
-        <View style={{ marginTop: 26 }}>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-            <SectionLabel>Moderation</SectionLabel>
-            <Pressable onPress={() => router.push('/connect-accounts')}>
-              <Text style={{ color: colors.primary, fontSize: font.size.sm, fontWeight: font.weight.semibold }}>
-                Manage
-              </Text>
-            </Pressable>
-          </View>
+        <View style={{ marginTop: spacing.xl }}>
+          <SectionLabel action={{ label: 'Manage', onPress: () => router.push('/connect-accounts') }}>
+            Moderation
+          </SectionLabel>
           {accounts.length === 0 ? (
             <Card>
               <Pressable
@@ -270,17 +265,12 @@ export default function Dashboard() {
         </View>
 
         {/* Live feed */}
-        <View style={{ marginTop: 26 }}>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-            <SectionLabel>Recently removed</SectionLabel>
-            {feed.length > 0 && (
-              <Pressable onPress={() => router.push('/(tabs)/log')}>
-                <Text style={{ color: colors.primary, fontSize: font.size.sm, fontWeight: font.weight.semibold }}>
-                  See all
-                </Text>
-              </Pressable>
-            )}
-          </View>
+        <View style={{ marginTop: spacing.xl }}>
+          <SectionLabel
+            action={feed.length > 0 ? { label: 'See all', onPress: () => router.push('/(tabs)/log') } : undefined}
+          >
+            Recently removed
+          </SectionLabel>
 
           {feed.length === 0 ? (
             <Card>
