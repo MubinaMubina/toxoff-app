@@ -1,4 +1,3 @@
-import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
@@ -14,7 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { LogoMark } from '../../src/components/Logo';
 import { SocialSignInButtons } from '../../src/components/SocialSignInButtons';
 import { TextField } from '../../src/components/TextField';
-import { Button, H1, Muted } from '../../src/components/ui';
+import { Button, H1, HeaderButton, Muted } from '../../src/components/ui';
 import { useAuth } from '../../src/context/AuthContext';
 import { useTheme } from '../../src/theme/ThemeContext';
 
@@ -58,14 +57,14 @@ export default function SignUp() {
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView
-          contentContainerStyle={{ paddingHorizontal: spacing.gutter, paddingVertical: 24, flexGrow: 1 }}
+          contentContainerStyle={{ paddingHorizontal: spacing.gutter, paddingBottom: 24, flexGrow: 1 }}
           keyboardShouldPersistTaps="handled"
         >
-          <Pressable onPress={() => router.back()} hitSlop={12} style={{ marginBottom: 20 }}>
-            <Ionicons name="chevron-back" size={26} color={colors.text} />
-          </Pressable>
+          <HeaderButton icon="chevron-back" label="Back" onPress={() => router.back()} />
 
-          <LogoMark size={52} />
+          <View style={{ marginTop: 8 }}>
+            <LogoMark size={52} />
+          </View>
           <H1 style={{ marginTop: 18 }}>Create your account</H1>
           <Muted style={{ marginTop: 6 }}>
             Try Plus free for 7 days with 100 free comment checks. No card needed.

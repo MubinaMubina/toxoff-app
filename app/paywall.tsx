@@ -3,7 +3,7 @@ import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Badge, Button, H1, Segmented } from '../src/components/ui';
+import { Badge, Button, H1, HeaderButton, Segmented } from '../src/components/ui';
 import { useAuth } from '../src/context/AuthContext';
 import { useRegion } from '../src/context/RegionContext';
 import { getPlan, PAID_PLANS } from '../src/data/plans';
@@ -93,10 +93,11 @@ export default function Paywall() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
-      <ScrollView contentContainerStyle={{ padding: spacing.gutter, paddingBottom: 28 }} showsVerticalScrollIndicator={false}>
-        <Pressable onPress={() => router.back()} hitSlop={12} style={{ paddingVertical: 4 }}>
-          <Ionicons name="close" size={26} color={colors.text} />
-        </Pressable>
+      <ScrollView
+        contentContainerStyle={{ paddingHorizontal: spacing.gutter, paddingBottom: 28 }}
+        showsVerticalScrollIndicator={false}
+      >
+        <HeaderButton icon="close" label="Close" onPress={() => router.back()} />
 
         <H1 style={{ marginTop: 8 }}>Choose your plan</H1>
         <Text style={{ color: colors.textMuted, fontSize: font.size.md, marginTop: 6, lineHeight: 21 }}>

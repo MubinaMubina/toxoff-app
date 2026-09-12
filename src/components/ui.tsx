@@ -126,6 +126,39 @@ export function Card({
   );
 }
 
+/* ---------------- Header button ---------------- */
+
+// Close / back for modal and onboarding screens: a 44pt box at the very top-left, where iOS puts
+// the navigation bar's leading button. The negative margin cancels the glyph's built-in padding
+// so its ink lines up with the screen gutter and the title below.
+export function HeaderButton({
+  icon,
+  label,
+  onPress,
+}: {
+  icon: 'close' | 'chevron-back';
+  label: string;
+  onPress: () => void;
+}) {
+  const { colors } = useTheme();
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      style={({ pressed }) => ({
+        width: 44,
+        height: 44,
+        justifyContent: 'center',
+        marginLeft: -7,
+        opacity: pressed ? 0.5 : 1,
+      })}
+    >
+      <Ionicons name={icon} size={26} color={colors.text} />
+    </Pressable>
+  );
+}
+
 /* ---------------- List rows ---------------- */
 
 // iOS-style grouped lists: rows inset like Card content, every leading icon centered in the

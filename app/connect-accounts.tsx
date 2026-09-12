@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { PlatformIcon } from '../src/components/PlatformIcon';
-import { Button, Card, H1, Muted, RowSeparator } from '../src/components/ui';
+import { Button, Card, H1, HeaderButton, Muted, RowSeparator } from '../src/components/ui';
 import { useAuth } from '../src/context/AuthContext';
 import { useModeration } from '../src/context/ModerationContext';
 import { getPlan } from '../src/data/plans';
@@ -67,11 +67,9 @@ export default function ConnectAccounts() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
       <ScrollView contentContainerStyle={{ flexGrow: 1, paddingHorizontal: spacing.gutter }}>
-        <Pressable onPress={() => router.back()} hitSlop={12} style={{ paddingVertical: 14 }}>
-          <Ionicons name="close" size={26} color={colors.text} />
-        </Pressable>
+        <HeaderButton icon="close" label="Close" onPress={() => router.back()} />
 
-        <H1>Connect your accounts</H1>
+        <H1 style={{ marginTop: 8 }}>Connect your accounts</H1>
         <Muted style={{ marginTop: 6 }}>
           toxoff needs access to moderate comments. You can disconnect anytime.
         </Muted>
