@@ -1,20 +1,20 @@
 import React, { useMemo, useState } from 'react';
-import { FlatList, ScrollView, Text, View } from 'react-native';
+import { Alert, FlatList, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { FilterChip } from '../../src/components/FilterChip';
 import { LogRow } from '../../src/components/LogRow';
 import { EmptyState, Segmented } from '../../src/components/ui';
 import { useModeration } from '../../src/context/ModerationContext';
 import { REASON_LABELS } from '../../src/data/mockData';
+import { DAY_MS } from '../../src/lib/time';
 import { useTheme } from '../../src/theme/ThemeContext';
 import { ModerationReason, Platform } from '../../src/types';
 
 type DateRange = 'today' | 'week' | 'month' | 'all';
-const NOW = new Date('2026-06-05T14:30:00Z').getTime();
 const RANGE_MS: Record<DateRange, number> = {
-  today: 86_400_000,
-  week: 7 * 86_400_000,
-  month: 30 * 86_400_000,
+  today: DAY_MS,
+  week: 7 * DAY_MS,
+  month: 30 * DAY_MS,
   all: Number.MAX_SAFE_INTEGER,
 };
 
@@ -35,16 +35,20 @@ export default function Log() {
   const [reason, setReason] = useState<ModerationReason | 'all'>('all');
   const [range, setRange] = useState<DateRange>('all');
 
-  const filtered = useMemo(
-    () =>
-      comments.filter((c) => {
-        if (platform !== 'all' && c.platform !== platform) return false;
-        if (reason !== 'all' && c.reason !== reason) return false;
-        if (NOW - new Date(c.createdAt).getTime() > RANGE_MS[range]) return false;
-        return true;
-      }),
-    [comments, platform, reason, range]
-  );
+  const restore = (id: string) =>
+    restoreComment(id).catch((e: any) =>
+      Alert.alert('Could not restore comment', e?.message ?? 'Please try again.')
+    );
+
+  const filtered = useMemo(() => {
+    const now = Date.now();
+    return comments.filter((c) => {
+      if (platform !== 'all' && c.platform !== platform) return false;
+      if (reason !== 'all' && c.reason !== reason) return false;
+      if (now - new Date(c.createdAt).getTime() > RANGE_MS[range]) return false;
+      return true;
+    });
+  }, [comments, platform, reason, range]);
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }} edges={['top']}>
@@ -102,7 +106,7 @@ export default function Log() {
       <FlatList
         data={filtered}
         keyExtractor={(c) => c.id}
-        renderItem={({ item }) => <LogRow comment={item} onRestore={restoreComment} />}
+        renderItem={({ item }) => <LogRow comment={item} onRestore={restore} />}
         contentContainerStyle={{ padding: 20, gap: 10, paddingBottom: 32 }}
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={

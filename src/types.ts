@@ -27,9 +27,8 @@ export type ConnectedAccount = {
   id: string;
   platform: Platform;
   handle: string;
-  connected: boolean;
+  connected: boolean; // false = platform token expired/revoked; needs reconnect
   paused: boolean;
-  avatarColor: string;
 };
 
 export type CategoryKey =
@@ -46,12 +45,15 @@ export type FilterSettings = {
   blockedUsers: string[];
 };
 
-export type PlanId = 'solo' | 'plus';
+export type PlanId = 'free' | 'solo' | 'plus';
+export type PaidPlanId = Exclude<PlanId, 'free'>;
 
 export type Plan = {
   id: PlanId;
   name: string;
-  maxAccounts: number; // 1 for solo, 5 for plus
+  maxAccounts: number;
+  keywordBlocklist: boolean;
+  blockedUsers: boolean;
   popular?: boolean;
   tagline: string;
   features: string[];
@@ -81,5 +83,5 @@ export type Region = {
   symbol: string; // "Rs", "$"
   provider: PaymentProvider;
   methods: PaymentMethod[];
-  prices: Record<PlanId, PlanPrice>;
+  prices: Record<PaidPlanId, PlanPrice>;
 };

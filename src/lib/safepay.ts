@@ -1,5 +1,6 @@
 import * as WebBrowser from 'expo-web-browser';
-import { BillingInterval, PaymentMethod, PlanId } from '../types';
+import { BillingInterval, PaidPlanId, PaymentMethod } from '../types';
+import { apiPost, isApiConfigured } from './api';
 
 /**
  * Safepay checkout (Pakistan).
@@ -11,16 +12,15 @@ import { BillingInterval, PaymentMethod, PlanId } from '../types';
  * back to the app via the `toxoff://` scheme.
  *
  * Expected backend route:
- *   POST {EXPO_PUBLIC_API_BASE_URL}/billing/safepay/session
- *   body: { planId, interval, method, userId, currency: 'PKR' }
+ *   POST {EXPO_PUBLIC_API_BASE_URL}/billing/safepay/session  (Authorization: Bearer <session>)
+ *   body: { planId, interval, method, returnUrl }
  *   returns: { checkoutUrl }
  */
 
 export type SafepayParams = {
-  planId: PlanId;
+  planId: PaidPlanId;
   interval: BillingInterval;
   method: PaymentMethod;
-  userId: string;
 };
 
 export type SafepayResult =
@@ -33,19 +33,15 @@ const RETURN_URL = 'toxoff://billing/safepay/return';
 export async function createSafepayCheckout(
   params: SafepayParams
 ): Promise<SafepayResult> {
-  const base = process.env.EXPO_PUBLIC_API_BASE_URL;
-  if (!base) {
+  if (!isApiConfigured) {
     // Demo mode — no backend configured. Pretend the trial subscription was created.
     return { status: 'demo' };
   }
 
-  const res = await fetch(`${base}/billing/safepay/session`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ...params, currency: 'PKR', returnUrl: RETURN_URL }),
+  const { checkoutUrl } = await apiPost<{ checkoutUrl: string }>('/billing/safepay/session', {
+    ...params,
+    returnUrl: RETURN_URL,
   });
-  if (!res.ok) throw new Error('Could not start Safepay checkout');
-  const { checkoutUrl } = (await res.json()) as { checkoutUrl: string };
 
   const result = await WebBrowser.openAuthSessionAsync(checkoutUrl, RETURN_URL);
   if (result.type === 'success') return { status: 'success' };

@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
+import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
   KeyboardAvoidingView,
@@ -13,9 +14,16 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Card, SectionLabel, Segmented } from '../../src/components/ui';
+import { useAuth } from '../../src/context/AuthContext';
 import { useModeration } from '../../src/context/ModerationContext';
+import { getPlan, PAID_PLANS } from '../../src/data/plans';
 import { useTheme } from '../../src/theme/ThemeContext';
-import { CategoryKey, Sensitivity } from '../../src/types';
+import { CategoryKey, Plan, Sensitivity } from '../../src/types';
+
+const plansWith = (feature: 'keywordBlocklist' | 'blockedUsers') =>
+  PAID_PLANS.filter((p: Plan) => p[feature])
+    .map((p) => p.name)
+    .join(' and ');
 
 const CATEGORIES: { key: CategoryKey; label: string; desc: string; icon: keyof typeof Ionicons.glyphMap }[] = [
   { key: 'hate_speech', label: 'Hate speech', desc: 'Attacks based on identity', icon: 'megaphone-outline' },
@@ -33,6 +41,8 @@ const SENSITIVITY_HINT: Record<Sensitivity, string> = {
 
 export default function Filters() {
   const { colors, font, radius } = useTheme();
+  const router = useRouter();
+  const plan = getPlan(useAuth().subscription.plan);
   const {
     filters,
     setSensitivity,
@@ -140,75 +150,133 @@ export default function Filters() {
           {/* Keyword blocklist */}
           <View style={{ marginTop: 26 }}>
             <SectionLabel>Keyword blocklist</SectionLabel>
-            <View style={{ flexDirection: 'row', gap: 10 }}>
-              <View
-                style={{
-                  flex: 1,
-                  backgroundColor: colors.surfaceAlt,
-                  borderRadius: radius.md,
-                  paddingHorizontal: 14,
-                  height: 50,
-                  justifyContent: 'center',
-                }}
-              >
-                <TextInput
-                  value={keyword}
-                  onChangeText={setKeyword}
-                  onSubmitEditing={submitKeyword}
-                  placeholder="Add a word or phrase"
-                  placeholderTextColor={colors.textFaint}
-                  autoCapitalize="none"
-                  returnKeyType="done"
-                  style={{ color: colors.text, fontSize: font.size.md }}
+            {!plan.keywordBlocklist ? (
+              <LockedFeature
+                description="Always remove comments containing words or phrases you choose."
+                availableOn={plansWith('keywordBlocklist')}
+                savedCount={filters.keywords.length}
+                savedNoun="keyword"
+                onUpgrade={() => router.push('/paywall')}
+              />
+            ) : (
+              <>
+                <View style={{ flexDirection: 'row', gap: 10 }}>
+                  <View
+                    style={{
+                      flex: 1,
+                      backgroundColor: colors.surfaceAlt,
+                      borderRadius: radius.md,
+                      paddingHorizontal: 14,
+                      height: 50,
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <TextInput
+                      value={keyword}
+                      onChangeText={setKeyword}
+                      onSubmitEditing={submitKeyword}
+                      placeholder="Add a word or phrase"
+                      placeholderTextColor={colors.textFaint}
+                      autoCapitalize="none"
+                      returnKeyType="done"
+                      style={{ color: colors.text, fontSize: font.size.md }}
+                    />
+                  </View>
+                  <AddButton onPress={submitKeyword} />
+                </View>
+                <ChipList
+                  items={filters.keywords}
+                  onRemove={removeKeyword}
+                  empty="No blocked keywords yet."
                 />
-              </View>
-              <AddButton onPress={submitKeyword} />
-            </View>
-            <ChipList
-              items={filters.keywords}
-              onRemove={removeKeyword}
-              empty="No blocked keywords yet."
-            />
+              </>
+            )}
           </View>
 
           {/* Blocked users */}
           <View style={{ marginTop: 26 }}>
             <SectionLabel>Blocked users</SectionLabel>
-            <View style={{ flexDirection: 'row', gap: 10 }}>
-              <View
-                style={{
-                  flex: 1,
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  backgroundColor: colors.surfaceAlt,
-                  borderRadius: radius.md,
-                  paddingHorizontal: 14,
-                  height: 50,
-                }}
-              >
-                <Text style={{ color: colors.textFaint, fontSize: font.size.md }}>@</Text>
-                <TextInput
-                  value={blockedUser}
-                  onChangeText={setBlockedUser}
-                  onSubmitEditing={submitUser}
-                  placeholder="username"
-                  placeholderTextColor={colors.textFaint}
-                  autoCapitalize="none"
-                  returnKeyType="done"
-                  style={{ color: colors.text, fontSize: font.size.md, flex: 1, marginLeft: 2 }}
+            {!plan.blockedUsers ? (
+              <LockedFeature
+                description="Always remove every comment from specific accounts."
+                availableOn={plansWith('blockedUsers')}
+                savedCount={filters.blockedUsers.length}
+                savedNoun="blocked user"
+                onUpgrade={() => router.push('/paywall')}
+              />
+            ) : (
+              <>
+                <View style={{ flexDirection: 'row', gap: 10 }}>
+                  <View
+                    style={{
+                      flex: 1,
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      backgroundColor: colors.surfaceAlt,
+                      borderRadius: radius.md,
+                      paddingHorizontal: 14,
+                      height: 50,
+                    }}
+                  >
+                    <Text style={{ color: colors.textFaint, fontSize: font.size.md }}>@</Text>
+                    <TextInput
+                      value={blockedUser}
+                      onChangeText={setBlockedUser}
+                      onSubmitEditing={submitUser}
+                      placeholder="username"
+                      placeholderTextColor={colors.textFaint}
+                      autoCapitalize="none"
+                      returnKeyType="done"
+                      style={{ color: colors.text, fontSize: font.size.md, flex: 1, marginLeft: 2 }}
+                    />
+                  </View>
+                  <AddButton onPress={submitUser} />
+                </View>
+                <ChipList
+                  items={filters.blockedUsers.map((u) => `@${u}`)}
+                  onRemove={(label) => removeBlockedUser(label.replace(/^@/, ''))}
+                  empty="No blocked users yet."
                 />
-              </View>
-              <AddButton onPress={submitUser} />
-            </View>
-            <ChipList
-              items={filters.blockedUsers.map((u) => `@${u}`)}
-              onRemove={(label) => removeBlockedUser(label.replace(/^@/, ''))}
-              empty="No blocked users yet."
-            />
+              </>
+            )}
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
+  );
+}
+
+function LockedFeature({
+  description,
+  availableOn,
+  savedCount,
+  savedNoun,
+  onUpgrade,
+}: {
+  description: string;
+  availableOn: string;
+  savedCount: number;
+  savedNoun: string;
+  onUpgrade: () => void;
+}) {
+  const { colors, font } = useTheme();
+  return (
+    <Pressable onPress={onUpgrade}>
+      <Card style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+        <Ionicons name="lock-closed" size={20} color={colors.primary} />
+        <View style={{ flex: 1 }}>
+          <Text style={{ color: colors.text, fontSize: font.size.sm, lineHeight: 19 }}>{description}</Text>
+          <Text style={{ color: colors.textMuted, fontSize: font.size.xs, marginTop: 4, lineHeight: 17 }}>
+            Available on {availableOn}.
+            {savedCount > 0 &&
+              ` Your ${savedCount} saved ${savedNoun}${savedCount === 1 ? '' : 's'} will apply again when you upgrade.`}
+          </Text>
+        </View>
+        <Text style={{ color: colors.primary, fontSize: font.size.sm, fontWeight: font.weight.semibold }}>
+          Upgrade
+        </Text>
+      </Card>
+    </Pressable>
   );
 }
 

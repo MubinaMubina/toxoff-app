@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
+  Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -10,8 +11,8 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { GoogleButton } from '../../src/components/GoogleButton';
 import { LogoMark } from '../../src/components/Logo';
+import { SocialSignInButtons } from '../../src/components/SocialSignInButtons';
 import { TextField } from '../../src/components/TextField';
 import { Button, H1, Muted } from '../../src/components/ui';
 import { useAuth } from '../../src/context/AuthContext';
@@ -20,13 +21,12 @@ import { useTheme } from '../../src/theme/ThemeContext';
 export default function SignUp() {
   const { colors, font } = useTheme();
   const router = useRouter();
-  const { signUp, signInWithGoogle } = useAuth();
+  const { signUp } = useAuth();
 
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const submit = async () => {
@@ -37,25 +37,20 @@ export default function SignUp() {
     }
     setLoading(true);
     try {
-      await signUp(email.trim(), password, name.trim());
+      const { needsConfirmation } = await signUp(email.trim(), password, name.trim());
+      if (needsConfirmation) {
+        Alert.alert(
+          'Confirm your email',
+          `We sent a link to ${email.trim()}. Open it to activate your account, then log in — your 7-day trial starts right away.`
+        );
+        router.replace('/(auth)/login');
+        return;
+      }
       router.replace('/(auth)/trial-started');
     } catch (e: any) {
       setError(e?.message ?? 'Could not create account.');
     } finally {
       setLoading(false);
-    }
-  };
-
-  const google = async () => {
-    setGoogleLoading(true);
-    setError(null);
-    try {
-      await signInWithGoogle();
-      router.replace('/(auth)/trial-started');
-    } catch (e: any) {
-      setError(e?.message ?? 'Google sign-in failed.');
-    } finally {
-      setGoogleLoading(false);
     }
   };
 
@@ -72,7 +67,9 @@ export default function SignUp() {
 
           <LogoMark size={52} />
           <H1 style={{ marginTop: 18 }}>Create your account</H1>
-          <Muted style={{ marginTop: 6 }}>Start your 7-day free trial. No charge today.</Muted>
+          <Muted style={{ marginTop: 6 }}>
+            Try Plus free for 7 days with 100 free comment checks. No card needed.
+          </Muted>
 
           <View style={{ gap: 14, marginTop: 28 }}>
             <TextField
@@ -114,7 +111,7 @@ export default function SignUp() {
               <View style={{ flex: 1, height: 1, backgroundColor: colors.border }} />
             </View>
 
-            <GoogleButton onPress={google} loading={googleLoading} />
+            <SocialSignInButtons onError={setError} />
           </View>
 
           <View style={{ flex: 1 }} />

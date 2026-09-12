@@ -20,6 +20,7 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.toxoff.app",
       "buildNumber": "1",
+      "usesAppleSignIn": true,
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
@@ -58,7 +59,8 @@
         }
       ],
       "expo-font",
-      "expo-asset"
+      "expo-asset",
+      "expo-apple-authentication"
     ],
     "experiments": {
       "typedRoutes": true

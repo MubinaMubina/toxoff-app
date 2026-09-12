@@ -5,7 +5,7 @@ import { Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button } from '../../src/components/ui';
 import { useAuth } from '../../src/context/AuthContext';
-import { TRIAL_DAYS } from '../../src/data/plans';
+import { FREE_COMMENT_ALLOWANCE, TRIAL_DAYS } from '../../src/data/plans';
 import { fullTimestamp } from '../../src/lib/time';
 import { useTheme } from '../../src/theme/ThemeContext';
 
@@ -52,8 +52,8 @@ export default function TrialStarted() {
             maxWidth: 320,
           }}
         >
-          You now have full access to {TRIAL_DAYS} days of automatic comment moderation. We won't
-          charge you a cent until your trial ends.
+          You have {TRIAL_DAYS} days of Plus and {FREE_COMMENT_ALLOWANCE} free comment checks. Any
+          checks you don't use carry over to the Free plan — no card needed, no surprise charges.
         </Text>
 
         {subscription.trialEndsAt && (

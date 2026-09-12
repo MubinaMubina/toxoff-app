@@ -7,7 +7,7 @@ const anonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
 
 /**
  * Supabase handles auth + the moderation_log / accounts / filters tables.
- * See README and supabase/schema.sql for the database layout.
+ * See README and supabase/migrations for the database layout.
  *
  * If env vars are missing we still create a client with placeholder values so
  * the app boots in "demo mode" (mock data, no network). isSupabaseConfigured
@@ -24,6 +24,8 @@ export const supabase = createClient(
       autoRefreshToken: true,
       persistSession: true,
       detectSessionInUrl: false,
+      // Google sign-in returns a one-time code that exchangeCodeForSession swaps for a session.
+      flowType: 'pkce',
     },
   }
 );

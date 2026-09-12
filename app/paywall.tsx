@@ -6,7 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Badge, Button, Segmented } from '../src/components/ui';
 import { useAuth } from '../src/context/AuthContext';
 import { useRegion } from '../src/context/RegionContext';
-import { PLANS, TRIAL_DAYS } from '../src/data/plans';
+import { getPlan, PAID_PLANS } from '../src/data/plans';
 import {
   annualTotal,
   formatPrice,
@@ -14,8 +14,9 @@ import {
   priceFor,
 } from '../src/data/pricing';
 import { startSubscription } from '../src/lib/billing';
+import { fullTimestamp } from '../src/lib/time';
 import { useTheme } from '../src/theme/ThemeContext';
-import { BillingInterval, PaymentMethod, PlanId } from '../src/types';
+import { BillingInterval, PaidPlanId, PaymentMethod } from '../src/types';
 
 const METHOD_ICON: Record<string, keyof typeof Ionicons.glyphMap> = {
   card: 'card-outline',
@@ -29,13 +30,27 @@ const METHOD_ICON: Record<string, keyof typeof Ionicons.glyphMap> = {
 export default function Paywall() {
   const { colors, font, radius } = useTheme();
   const router = useRouter();
-  const { user, subscription, setPlan } = useAuth();
+  const { user, subscription, refreshSubscription, setDemoPlan } = useAuth();
   const { region, available, setRegionCode } = useRegion();
 
   const [interval, setInterval] = useState<BillingInterval>('monthly');
-  const [selected, setSelected] = useState<PlanId>('plus');
+  const [selected, setSelected] = useState<PaidPlanId>('plus');
   const [method, setMethod] = useState<PaymentMethod>(region.methods[0]);
   const [loading, setLoading] = useState(false);
+
+  const selectedName = getPlan(selected).name;
+  const trialEnd =
+    subscription.status === 'trialing' && subscription.trialEndsAt
+      ? fullTimestamp(subscription.trialEndsAt).split(',')[0]
+      : null;
+  const isCurrentPlan = subscription.status === 'active' && subscription.plan === selected;
+  const ctaLabel = isCurrentPlan
+    ? 'Your current plan'
+    : subscription.status === 'active'
+      ? `Switch to ${selectedName}`
+      : subscription.status === 'trialing'
+        ? `Choose ${selectedName}`
+        : `Upgrade to ${selectedName}`;
 
   const cycleRegion = () => {
     const idx = available.findIndex((r) => r.code === region.code);
@@ -55,16 +70,18 @@ export default function Paywall() {
         planId: selected,
         interval,
         region,
-        userId: user.id,
         method,
       });
       if (result.status === 'cancelled') return;
-      setPlan(selected);
+      if (result.status === 'demo') setDemoPlan(selected);
+      else await refreshSubscription();
       Alert.alert(
         'You’re all set 🎉',
         result.status === 'demo'
-          ? `Demo mode: ${PLANS.find((p) => p.id === selected)?.name} trial activated. Connect a real ${region.provider === 'safepay' ? 'Safepay' : 'Stripe'} backend to take live payments.`
-          : `Your ${TRIAL_DAYS}-day free trial has started. You won’t be charged until it ends.`
+          ? `Demo mode: you're on ${selectedName}. Connect a real ${region.provider === 'safepay' ? 'Safepay' : 'Stripe'} backend to take live payments.`
+          : trialEnd
+            ? `You're on ${selectedName}. You won’t be charged until your free trial ends on ${trialEnd}.`
+            : `You're on ${selectedName}.`
       );
       router.back();
     } catch (e: any) {
@@ -85,7 +102,11 @@ export default function Paywall() {
           Choose your plan
         </Text>
         <Text style={{ color: colors.textMuted, fontSize: font.size.md, marginTop: 6, lineHeight: 21 }}>
-          Start with a {TRIAL_DAYS}-day free trial. Cancel anytime before it ends and you won’t be charged.
+          {trialEnd
+            ? `Your free trial ends ${trialEnd}. Pick a plan now — you won’t be charged until then.`
+            : subscription.status === 'free'
+              ? 'Unlimited moderation, more accounts, and custom rules. Cancel anytime.'
+              : 'Change your plan anytime.'}
         </Text>
 
         {/* Region indicator */}
@@ -126,7 +147,7 @@ export default function Paywall() {
 
         {/* Plans */}
         <View style={{ gap: 14, marginTop: 18 }}>
-          {PLANS.map((plan) => {
+          {PAID_PLANS.map((plan) => {
             const active = selected === plan.id;
             const perMonth = priceFor(region, plan.id, interval);
             return (
@@ -165,7 +186,9 @@ export default function Paywall() {
                   </Text>
                   <Text style={{ color: colors.textMuted, fontSize: font.size.md, marginBottom: 6 }}>/mo</Text>
                   <View style={{ flex: 1 }} />
-                  <Badge label={`${TRIAL_DAYS}-day free trial`} color={colors.success} bg={colors.successSoft} />
+                  {subscription.status === 'active' && subscription.plan === plan.id && (
+                    <Badge label="Current plan" color={colors.success} bg={colors.successSoft} />
+                  )}
                 </View>
 
                 {interval === 'annual' && (
@@ -237,15 +260,7 @@ export default function Paywall() {
       </ScrollView>
 
       <View style={{ paddingHorizontal: 20, paddingBottom: 16, paddingTop: 8, borderTopWidth: 0.5, borderTopColor: colors.border }}>
-        <Button
-          label={
-            subscription.status === 'trialing'
-              ? `Switch to ${PLANS.find((p) => p.id === selected)?.name}`
-              : `Start ${TRIAL_DAYS}-day free trial`
-          }
-          onPress={subscribe}
-          loading={loading}
-        />
+        <Button label={ctaLabel} onPress={subscribe} loading={loading} disabled={isCurrentPlan} />
         <Text style={{ color: colors.textFaint, fontSize: font.size.xs, textAlign: 'center', marginTop: 10 }}>
           Powered by {region.provider === 'safepay' ? 'Safepay' : 'Stripe'} · Secure payments
         </Text>

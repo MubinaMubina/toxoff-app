@@ -1,7 +1,6 @@
-// Relative + absolute time formatting. "now" is injected so demo data stays stable.
-const NOW = new Date('2026-06-05T14:30:00Z').getTime();
+export const DAY_MS = 86_400_000;
 
-export function timeAgo(iso: string, now: number = NOW): string {
+export function timeAgo(iso: string, now: number = Date.now()): string {
   const diff = Math.max(0, now - new Date(iso).getTime());
   const m = Math.floor(diff / 60_000);
   if (m < 1) return 'just now';

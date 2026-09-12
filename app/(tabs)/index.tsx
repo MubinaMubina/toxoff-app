@@ -9,7 +9,9 @@ import { RemovedCommentRow } from '../../src/components/RemovedCommentRow';
 import { Card, EmptyState, SectionLabel } from '../../src/components/ui';
 import { useAuth } from '../../src/context/AuthContext';
 import { useModeration } from '../../src/context/ModerationContext';
+import { FREE_COMMENT_ALLOWANCE, getPlan } from '../../src/data/plans';
 import { registerForPushNotifications } from '../../src/lib/notifications';
+import { fullTimestamp } from '../../src/lib/time';
 import { palette } from '../../src/theme/colors';
 import { useTheme } from '../../src/theme/ThemeContext';
 
@@ -35,18 +37,88 @@ function MetricCard({ value, label, accent }: { value: number; label: string; ac
   );
 }
 
+function FreeChecksCard({
+  title,
+  used,
+  onUpgrade,
+}: {
+  title: string;
+  used: number;
+  onUpgrade: () => void;
+}) {
+  const { colors, font, radius } = useTheme();
+  const limit = FREE_COMMENT_ALLOWANCE;
+  const reached = used >= limit;
+  return (
+    <Pressable onPress={onUpgrade}>
+      <Card style={{ marginTop: 18 }}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Text style={{ color: colors.text, fontSize: font.size.md, fontWeight: font.weight.semibold }}>
+            {title}
+          </Text>
+          <Text style={{ color: colors.primary, fontSize: font.size.sm, fontWeight: font.weight.semibold }}>
+            Upgrade
+          </Text>
+        </View>
+        <View
+          style={{
+            height: 8,
+            borderRadius: radius.pill,
+            backgroundColor: colors.surfaceAlt,
+            marginTop: 12,
+            overflow: 'hidden',
+          }}
+        >
+          <View
+            style={{
+              width: `${Math.min(100, (used / limit) * 100)}%`,
+              height: '100%',
+              backgroundColor: reached ? colors.danger : colors.primary,
+            }}
+          />
+        </View>
+        <Text
+          style={{
+            color: reached ? colors.danger : colors.textMuted,
+            fontSize: font.size.sm,
+            marginTop: 8,
+            lineHeight: 19,
+          }}
+        >
+          {reached
+            ? `You've used all ${limit} free comment checks, so new comments aren't being checked. Subscribe to keep moderating.`
+            : `${used} of ${limit} free comment checks used`}
+        </Text>
+      </Card>
+    </Pressable>
+  );
+}
+
 export default function Dashboard() {
   const { colors, font } = useTheme();
   const router = useRouter();
   const { user, subscription } = useAuth();
-  const { metrics, comments, accounts, togglePause, notificationsEnabled } = useModeration();
+  const {
+    metrics,
+    comments,
+    accounts,
+    togglePause,
+    notificationsEnabled,
+    savePushToken,
+    freeCommentsUsed,
+  } = useModeration();
+  const plan = getPlan(subscription.plan);
+  const paid = subscription.status === 'active';
+  const outOfFreeChecks = !paid && freeCommentsUsed >= FREE_COMMENT_ALLOWANCE;
 
   // Register for push alerts once if the user has them enabled.
   useEffect(() => {
-    if (notificationsEnabled) registerForPushNotifications().catch(() => {});
-  }, [notificationsEnabled]);
+    if (!notificationsEnabled) return;
+    registerForPushNotifications()
+      .then((token) => token && savePushToken(token))
+      .catch(() => {});
+  }, [notificationsEnabled, savePushToken]);
 
-  const connected = accounts.filter((a) => a.connected);
   const feed = comments.slice(0, 6);
   const firstName = user?.name?.split(' ')[0] ?? 'there';
 
@@ -78,32 +150,16 @@ export default function Dashboard() {
           </Pressable>
         </View>
 
-        {/* Trial banner */}
-        {subscription.status === 'trialing' && (
-          <Pressable onPress={() => router.push('/paywall')}>
-            <View
-              style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                gap: 10,
-                backgroundColor: colors.primary,
-                borderRadius: 14,
-                padding: 14,
-                marginTop: 18,
-              }}
-            >
-              <Ionicons name="sparkles" size={20} color="#fff" />
-              <View style={{ flex: 1 }}>
-                <Text style={{ color: '#fff', fontWeight: font.weight.semibold, fontSize: font.size.md }}>
-                  You're on a free trial
-                </Text>
-                <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: font.size.sm, marginTop: 1 }}>
-                  Pick a plan to keep moderation running after it ends.
-                </Text>
-              </View>
-              <Ionicons name="chevron-forward" size={18} color="#fff" />
-            </View>
-          </Pressable>
+        {!paid && (
+          <FreeChecksCard
+            title={
+              subscription.status === 'trialing' && subscription.trialEndsAt
+                ? `${plan.name} trial · ends ${fullTimestamp(subscription.trialEndsAt).split(',')[0]}`
+                : 'Free plan'
+            }
+            used={freeCommentsUsed}
+            onUpgrade={() => router.push('/paywall')}
+          />
         )}
 
         {/* Metrics */}
@@ -126,7 +182,7 @@ export default function Dashboard() {
               </Text>
             </Pressable>
           </View>
-          {connected.length === 0 ? (
+          {accounts.length === 0 ? (
             <Card>
               <Pressable
                 onPress={() => router.push('/connect-accounts')}
@@ -141,45 +197,71 @@ export default function Dashboard() {
             </Card>
           ) : (
             <Card padded={false}>
-              {connected.map((acc, i) => (
-                <View
-                  key={acc.id}
-                  style={{
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    gap: 12,
-                    padding: 14,
-                    borderTopWidth: i === 0 ? 0 : 0.5,
-                    borderTopColor: colors.border,
-                  }}
-                >
-                  <PlatformIcon platform={acc.platform} size={16} withBackground />
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ color: colors.text, fontSize: font.size.md, fontWeight: font.weight.medium }}>
-                      {acc.handle}
-                    </Text>
-                    <Text
-                      style={{
-                        color: acc.paused ? colors.warning : colors.success,
-                        fontSize: font.size.xs,
-                        marginTop: 1,
-                        fontWeight: font.weight.medium,
-                      }}
-                    >
-                      {acc.paused ? 'Paused' : 'Active · moderating'}
-                    </Text>
-                  </View>
-                  <Switch
-                    value={!acc.paused}
-                    onValueChange={() => {
-                      Haptics.selectionAsync().catch(() => {});
-                      togglePause(acc.id);
+              {accounts.map((acc, i) => {
+                // After a downgrade, only the oldest accounts within the plan's limit are moderated.
+                const overLimit = i >= plan.maxAccounts;
+                const needsUpgrade = overLimit || outOfFreeChecks;
+                const status = !acc.connected
+                  ? 'Reconnect needed'
+                  : overLimit
+                    ? `Not moderated on ${plan.name}`
+                    : outOfFreeChecks
+                      ? 'Not moderating · free checks used up'
+                      : acc.paused
+                        ? 'Paused'
+                        : 'Active · moderating';
+                const healthy = acc.connected && !needsUpgrade && !acc.paused;
+                return (
+                  <View
+                    key={acc.id}
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: 12,
+                      padding: 14,
+                      borderTopWidth: i === 0 ? 0 : 0.5,
+                      borderTopColor: colors.border,
                     }}
-                    trackColor={{ false: colors.border, true: colors.primary }}
-                    thumbColor="#fff"
-                  />
-                </View>
-              ))}
+                  >
+                    <PlatformIcon platform={acc.platform} size={16} withBackground />
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ color: colors.text, fontSize: font.size.md, fontWeight: font.weight.medium }}>
+                        {acc.handle}
+                      </Text>
+                      <Text
+                        style={{
+                          color: healthy ? colors.success : colors.warning,
+                          fontSize: font.size.xs,
+                          marginTop: 1,
+                          fontWeight: font.weight.medium,
+                        }}
+                      >
+                        {status}
+                      </Text>
+                    </View>
+                    {!acc.connected || needsUpgrade ? (
+                      <Pressable
+                        onPress={() => router.push(acc.connected ? '/paywall' : '/connect-accounts')}
+                        hitSlop={8}
+                      >
+                        <Text style={{ color: colors.primary, fontSize: font.size.sm, fontWeight: font.weight.semibold }}>
+                          {acc.connected ? 'Upgrade' : 'Fix'}
+                        </Text>
+                      </Pressable>
+                    ) : (
+                      <Switch
+                        value={!acc.paused}
+                        onValueChange={() => {
+                          Haptics.selectionAsync().catch(() => {});
+                          togglePause(acc.id);
+                        }}
+                        trackColor={{ false: colors.border, true: colors.primary }}
+                        thumbColor="#fff"
+                      />
+                    )}
+                  </View>
+                );
+              })}
             </Card>
           )}
         </View>

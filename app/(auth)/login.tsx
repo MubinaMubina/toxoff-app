@@ -10,8 +10,8 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { GoogleButton } from '../../src/components/GoogleButton';
 import { LogoMark } from '../../src/components/Logo';
+import { SocialSignInButtons } from '../../src/components/SocialSignInButtons';
 import { TextField } from '../../src/components/TextField';
 import { Button, H1, Muted } from '../../src/components/ui';
 import { useAuth } from '../../src/context/AuthContext';
@@ -20,12 +20,11 @@ import { useTheme } from '../../src/theme/ThemeContext';
 export default function Login() {
   const { colors, font } = useTheme();
   const router = useRouter();
-  const { signIn, signInWithGoogle } = useAuth();
+  const { signIn } = useAuth();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const submit = async () => {
@@ -42,19 +41,6 @@ export default function Login() {
       setError(e?.message ?? 'Could not log in.');
     } finally {
       setLoading(false);
-    }
-  };
-
-  const google = async () => {
-    setGoogleLoading(true);
-    setError(null);
-    try {
-      await signInWithGoogle();
-      router.replace('/(tabs)');
-    } catch (e: any) {
-      setError(e?.message ?? 'Google sign-in failed.');
-    } finally {
-      setGoogleLoading(false);
     }
   };
 
@@ -109,7 +95,7 @@ export default function Login() {
               <View style={{ flex: 1, height: 1, backgroundColor: colors.border }} />
             </View>
 
-            <GoogleButton onPress={google} loading={googleLoading} />
+            <SocialSignInButtons onError={setError} />
           </View>
 
           <View style={{ flex: 1 }} />

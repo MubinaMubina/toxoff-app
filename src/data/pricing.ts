@@ -1,5 +1,5 @@
 import { getLocales } from 'expo-localization';
-import { BillingInterval, PlanId, Region } from '../types';
+import { BillingInterval, PaidPlanId, Region } from '../types';
 
 /**
  * Location-based pricing. Pakistan is the launch market and routes to Safepay
@@ -71,14 +71,14 @@ export function formatPrice(region: Region, amount: number): string {
 
 export function priceFor(
   region: Region,
-  plan: PlanId,
+  plan: PaidPlanId,
   interval: BillingInterval
 ): number {
   return region.prices[plan][interval];
 }
 
 /** Yearly total (used for the "billed Rs X/year" line on annual). */
-export function annualTotal(region: Region, plan: PlanId): number {
+export function annualTotal(region: Region, plan: PaidPlanId): number {
   return region.prices[plan].annual * 12;
 }
 

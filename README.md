@@ -4,8 +4,8 @@
 
 toxoff is a mobile app that connects to a creator's Instagram and/or TikTok accounts
 and uses AI to automatically detect and remove toxic, hateful, or harmful comments in
-any language. It ships with a 7-day free trial, location-based subscription tiers, and
-a clean dashboard.
+any language. Creators sign up with email, Google, or Apple, get a 7-day Plus trial, then
+stay on a Free tier unless they subscribe (location-based pricing).
 
 Built with **Expo (React Native) + TypeScript**, **Supabase** (auth + database),
 **Stripe** & **Safepay** (subscriptions), and **Expo Notifications** (push alerts).
@@ -47,7 +47,8 @@ src/
   data/                    # plans, pricing (region table), mock data
   lib/                     # supabase, billing, safepay, moderation, notifications, time
   components/              # Button, Card, Badge, LogRow, etc.
-supabase/schema.sql        # database tables + RLS + signup trigger
+supabase/config.toml       # Supabase CLI config (auth settings, redirect URLs)
+supabase/migrations/       # database schema: tables, RLS, triggers, plan limits
 scripts/generate-assets.mjs# placeholder icon/splash generator
 ```
 
@@ -59,10 +60,27 @@ All client env vars are prefixed `EXPO_PUBLIC_` (see `.env.example`). **Secret k
 (Stripe/Safepay secret, OpenAI) never go in the app** — they live on your backend.
 
 ### Supabase (auth + data)
-1. Create a project, then run `supabase/schema.sql` in the SQL editor.
-2. Set `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_ANON_KEY`.
-3. For **Google sign-in**: enable the Google provider in Supabase Auth and add the
-   `toxoff://` redirect URL. (`src/context/AuthContext.tsx` handles the OAuth exchange.)
+The hosted project is **toxoff** (ref `svkdtymwerqjzauvsnbf`, Singapore) and this repo is
+linked to it with the Supabase CLI. The database password is in the macOS Keychain under
+`supabase-toxoff-db`.
+
+- **Schema changes:** add a new file in `supabase/migrations/`, then
+  `npx supabase db push -p "$(security find-generic-password -s supabase-toxoff-db -w)"`.
+- **Auth settings** live in `supabase/config.toml` (site URL `toxoff://`, redirect URLs,
+  email confirmation, Apple). Always run `npx supabase config diff` before
+  `npx supabase config push` — undeclared settings are left alone, declared ones overwrite
+  the hosted project.
+- **App keys:** `.env` holds the project URL and anon key (public). The service-role key
+  never goes in the app.
+- **Email confirmation is off** for development. Before launch, add a custom SMTP provider
+  (e.g. Resend) — Supabase's built-in email only reaches your own team — and set
+  `[auth.email] enable_confirmations = true`.
+- **Google sign-in:** create a Web OAuth client in Google Cloud, then add it under
+  `[auth.external.google]` (secret via `env(...)`, never committed) and push.
+- **Sign in with Apple** (iOS only — required by App Store rule 4.8 because Google sign-in
+  is offered) is enabled for `com.toxoff.app` and `host.exp.Exponent` (Expo Go). `app.json`
+  sets `ios.usesAppleSignIn`, so EAS adds the capability to the App ID at build time.
+- Upgrade the project to **Pro** before launch — free projects pause after a week idle.
 
 ### AI moderation
 `src/lib/moderation.ts` holds the decision logic (sensitivity threshold + enabled
@@ -84,13 +102,24 @@ Pricing and payment rails are chosen by the user's **region** (auto-detected via
 `expo-localization`, overridable in Settings). Tiers and prices live in
 [`src/data/plans.ts`](src/data/plans.ts) and [`src/data/pricing.ts`](src/data/pricing.ts).
 
-| Tier | Accounts | Pakistan (PKR, Safepay) | Rest of world (USD, Stripe) |
-|------|----------|-------------------------|------------------------------|
-| **Solo** | 1 (IG *or* TikTok) | Rs 1,100/mo | $4/mo |
-| **Plus** | up to 5 (IG + TikTok) | Rs 2,500/mo | $9/mo |
+| Tier | Accounts | Limits | Pakistan (PKR, Safepay) | Rest of world (USD, Stripe) |
+|------|----------|--------|-------------------------|------------------------------|
+| **Free** | 1 (IG *or* TikTok) | shares the 100 free comment checks; no keyword blocklist or blocked users | free | free |
+| **Solo** | 1 (IG *or* TikTok) | unlimited; keyword blocklist | Rs 1,100/mo | $4/mo |
+| **Plus** | up to 5 (IG + TikTok) | unlimited; keyword blocklist + blocked users | Rs 2,500/mo | $9/mo |
 
-Both tiers include a **7-day free trial** and **monthly/annual** billing (annual = 2
-months free). **Launch market: Pakistan.**
+Every new account starts with a **7-day Plus trial** (no card) and moves to **Free** when it
+ends unless they subscribe. The trial and Free together get **100 free comment checks per
+account — ever, not per month**; once they're used, comments stop being checked until the
+user subscribes. Paid plans bill **monthly or annually** (annual = 2 months free).
+**Launch market: Pakistan.**
+
+Limits live in `src/data/plans.ts` (app) and `supabase/migrations` (server) — keep them in
+sync. The database enforces them itself: `enforce_account_limit` blocks extra accounts, and
+the moderation backend must call `consume_comment_check(user_id)` before checking each
+comment (it atomically spends one free check, and always allows paid plans). Paid-only
+rules use `effective_plan()`. When a plan lapses, the oldest accounts within the new limit
+keep being moderated.
 
 ### Payment providers
 - **Pakistan → Safepay** (`src/lib/safepay.ts`): cards + **JazzCash** + **Easypaisa**.

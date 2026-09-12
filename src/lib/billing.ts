@@ -1,4 +1,5 @@
-import { BillingInterval, PaymentMethod, PlanId, Region } from '../types';
+import { BillingInterval, PaidPlanId, PaymentMethod, Region } from '../types';
+import { apiPost, isApiConfigured } from './api';
 import { createSafepayCheckout } from './safepay';
 
 /**
@@ -13,17 +14,10 @@ import { createSafepayCheckout } from './safepay';
  * app runs in demo mode and `startSubscription` resolves to { status: 'demo' }.
  */
 
-// Stripe price IDs per plan + interval (configure in your Stripe dashboard).
-const STRIPE_PRICE_IDS: Record<PlanId, Record<BillingInterval, string>> = {
-  solo: { monthly: 'price_solo_monthly', annual: 'price_solo_annual' },
-  plus: { monthly: 'price_plus_monthly', annual: 'price_plus_annual' },
-};
-
 export type SubscriptionParams = {
-  planId: PlanId;
+  planId: PaidPlanId;
   interval: BillingInterval;
   region: Region;
-  userId: string;
   method?: PaymentMethod; // chosen method (Safepay flows)
 };
 
@@ -33,21 +27,10 @@ export type SubscriptionResult =
   | { status: 'cancelled' };
 
 async function startStripe(params: SubscriptionParams): Promise<SubscriptionResult> {
-  const base = process.env.EXPO_PUBLIC_API_BASE_URL;
-  if (!base) return { status: 'demo' };
+  if (!isApiConfigured) return { status: 'demo' };
 
-  const res = await fetch(`${base}/billing/subscribe`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      planId: params.planId,
-      interval: params.interval,
-      userId: params.userId,
-      currency: params.region.currency,
-      priceId: STRIPE_PRICE_IDS[params.planId][params.interval],
-    }),
-  });
-  if (!res.ok) throw new Error('Could not start subscription');
+  // The backend maps plan + interval to its Stripe price; the app never picks prices.
+  await apiPost('/billing/subscribe', { planId: params.planId, interval: params.interval });
   // The screen then presents the PaymentSheet with these params via
   // @stripe/stripe-react-native (initPaymentSheet / presentPaymentSheet).
   // Returning success here keeps the demo flow simple; wire the sheet in the UI.
@@ -62,7 +45,6 @@ export async function startSubscription(
       planId: params.planId,
       interval: params.interval,
       method: params.method ?? 'card',
-      userId: params.userId,
     });
   }
   return startStripe(params);

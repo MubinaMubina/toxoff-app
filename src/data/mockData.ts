@@ -1,7 +1,7 @@
 import { ConnectedAccount, FilterSettings, RemovedComment } from '../types';
 
-// A fixed "now" keeps timestamps deterministic across reloads in demo mode.
-const NOW = new Date('2026-06-05T14:30:00Z').getTime();
+// Relative to app launch so the demo feed always looks recent.
+const NOW = Date.now();
 const min = (n: number) => new Date(NOW - n * 60_000).toISOString();
 const hr = (n: number) => new Date(NOW - n * 3_600_000).toISOString();
 const day = (n: number) => new Date(NOW - n * 86_400_000).toISOString();
@@ -13,17 +13,10 @@ export const MOCK_ACCOUNTS: ConnectedAccount[] = [
     handle: '@yourbrand',
     connected: true,
     paused: false,
-    avatarColor: '#E1306C',
-  },
-  {
-    id: 'acc_tt',
-    platform: 'tiktok',
-    handle: '@yourbrand',
-    connected: false,
-    paused: false,
-    avatarColor: '#000000',
   },
 ];
+
+export const MOCK_FREE_COMMENTS_USED = 37;
 
 export const DEFAULT_FILTERS: FilterSettings = {
   sensitivity: 'medium',

@@ -17,12 +17,11 @@ export default function Settings() {
   const { colors, font, pref, setPref } = useTheme();
   const router = useRouter();
   const { user, subscription, signOut } = useAuth();
-  const { accounts, notificationsEnabled, setNotificationsEnabled } = useModeration();
+  const { accounts, notificationsEnabled, setNotificationsEnabled, savePushToken } = useModeration();
   const { region, available, setRegionCode } = useRegion();
 
   const [savingPush, setSavingPush] = useState(false);
-  const connected = accounts.filter((a) => a.connected);
-  const plan = subscription.plan ? getPlan(subscription.plan) : null;
+  const plan = getPlan(subscription.plan);
 
   const togglePush = async (value: boolean) => {
     if (!value) {
@@ -40,6 +39,7 @@ export default function Settings() {
       setNotificationsEnabled(false);
       return;
     }
+    savePushToken(token);
     setNotificationsEnabled(true);
   };
 
@@ -113,7 +113,7 @@ export default function Settings() {
                 <View style={{ flex: 1 }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                     <Text style={{ color: colors.text, fontSize: font.size.lg, fontWeight: font.weight.semibold }}>
-                      {plan ? `${plan.name} plan` : 'No plan'}
+                      {plan.name} plan
                     </Text>
                     {subscription.status === 'trialing' && (
                       <Badge label="Trial" color={colors.success} bg={colors.successSoft} />
@@ -121,8 +121,10 @@ export default function Settings() {
                   </View>
                   <Text style={{ color: colors.textMuted, fontSize: font.size.sm, marginTop: 3 }}>
                     {subscription.status === 'trialing' && subscription.trialEndsAt
-                      ? `Free trial ends ${fullTimestamp(subscription.trialEndsAt).split(',')[0]}`
-                      : 'Manage your plan & billing'}
+                      ? `Trial ends ${fullTimestamp(subscription.trialEndsAt).split(',')[0]}, then Free`
+                      : subscription.status === 'free'
+                        ? 'Upgrade for unlimited moderation'
+                        : 'Manage your plan & billing'}
                   </Text>
                 </View>
                 <Ionicons name="chevron-forward" size={20} color={colors.textFaint} />
@@ -135,7 +137,7 @@ export default function Settings() {
         <View style={{ marginTop: 24 }}>
           <SectionLabel>Connected accounts</SectionLabel>
           <Card padded={false}>
-            {connected.map((acc, i) => (
+            {accounts.map((acc, i) => (
               <View
                 key={acc.id}
                 style={{
@@ -151,7 +153,11 @@ export default function Settings() {
                 <Text style={{ color: colors.text, fontSize: font.size.md, flex: 1, fontWeight: font.weight.medium }}>
                   {acc.handle}
                 </Text>
-                <Ionicons name="checkmark-circle" size={20} color={colors.success} />
+                <Ionicons
+                  name={acc.connected ? 'checkmark-circle' : 'alert-circle'}
+                  size={20}
+                  color={acc.connected ? colors.success : colors.warning}
+                />
               </View>
             ))}
             <Pressable
@@ -161,13 +167,13 @@ export default function Settings() {
                 alignItems: 'center',
                 gap: 10,
                 padding: 14,
-                borderTopWidth: connected.length ? 0.5 : 0,
+                borderTopWidth: accounts.length ? 0.5 : 0,
                 borderTopColor: colors.border,
               }}
             >
               <Ionicons name="add-circle-outline" size={22} color={colors.primary} />
               <Text style={{ color: colors.primary, fontSize: font.size.md, fontWeight: font.weight.medium }}>
-                {connected.length ? 'Manage accounts' : 'Connect an account'}
+                {accounts.length ? 'Manage accounts' : 'Connect an account'}
               </Text>
             </Pressable>
           </Card>
