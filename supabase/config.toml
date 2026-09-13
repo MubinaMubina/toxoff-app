@@ -336,6 +336,18 @@ skip_nonce_check = false
 # If enabled, it will allow the user to successfully authenticate when the provider does not return an email address.
 email_optional = false
 
+[auth.external.google]
+enabled = true
+# Web application client in Google Cloud (project toxoff). Its authorized redirect URI is
+# https://sjfmcieunormozrybqmi.supabase.co/auth/v1/callback. The app signs in through the browser.
+client_id = "361952383206-0s42ods0imqagnqv4qign2tmnt6fa93p.apps.googleusercontent.com"
+# Not in git: config push reads it from this variable (Keychain: supabase-toxoff-google-secret).
+secret = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_SECRET)"
+redirect_uri = ""
+url = ""
+skip_nonce_check = false
+email_optional = false
+
 # Allow Solana wallet holders to sign in to your project via the Sign in with Solana (SIWS, EIP-4361) standard.
 # You can configure "web3" rate limit in the [auth.rate_limit] section and set up [auth.captcha] if self-hosting.
 [auth.web3.solana]

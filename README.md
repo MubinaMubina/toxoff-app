@@ -62,7 +62,7 @@ All client env vars are prefixed `EXPO_PUBLIC_` (see `.env.example`). **Secret k
 (Stripe/Safepay secret, OpenAI) never go in the app** — they live on your backend.
 
 ### Supabase (auth + data)
-The hosted project is **toxoff** (ref `svkdtymwerqjzauvsnbf`, Singapore) and this repo is
+The hosted project is **toxoff** (ref `sjfmcieunormozrybqmi`, Singapore) and this repo is
 linked to it with the Supabase CLI. The database password is in the macOS Keychain under
 `supabase-toxoff-db`.
 
@@ -77,8 +77,10 @@ linked to it with the Supabase CLI. The database password is in the macOS Keycha
 - **Email confirmation is off** for development. Before launch, add a custom SMTP provider
   (e.g. Resend) — Supabase's built-in email only reaches your own team — and set
   `[auth.email] enable_confirmations = true`.
-- **Google sign-in:** create a Web OAuth client in Google Cloud, then add it under
-  `[auth.external.google]` (secret via `env(...)`, never committed) and push.
+- **Google sign-in:** set up. Web OAuth client in Google Cloud project *toxoff*, configured under
+  `[auth.external.google]`. The secret isn't in git: it's in the Keychain (`supabase-toxoff-google-secret`),
+  so push config with it in the environment, or the push would clear it:
+  `SUPABASE_AUTH_EXTERNAL_GOOGLE_SECRET="$(security find-generic-password -s supabase-toxoff-google-secret -w)" npx supabase config push`
 - **Sign in with Apple** (iOS only — required by App Store rule 4.8 because Google sign-in
   is offered) is enabled for `com.toxoff.app` and `host.exp.Exponent` (Expo Go). `app.json`
   sets `ios.usesAppleSignIn`, so EAS adds the capability to the App ID at build time.
@@ -103,7 +105,7 @@ not deleted, so Restore can bring them back. TikTok isn't built yet (connect ans
 ## Moderation backend
 
 One Supabase Edge Function, `supabase/functions/api`, deployed at
-`https://svkdtymwerqjzauvsnbf.supabase.co/functions/v1/api` (the app's `EXPO_PUBLIC_API_BASE_URL`).
+`https://sjfmcieunormozrybqmi.supabase.co/functions/v1/api` (the app's `EXPO_PUBLIC_API_BASE_URL`).
 
 | Route | Called by | Does |
 |-------|-----------|------|
@@ -144,9 +146,9 @@ routes check the user's session themselves.
 1. At developers.facebook.com, create a Business app with the Instagram use case.
 2. Instagram → API setup with Instagram login: put the Instagram app ID and secret in the secrets above.
 3. Business login settings → OAuth redirect URI:
-   `https://svkdtymwerqjzauvsnbf.supabase.co/functions/v1/api/connect/instagram/callback`
+   `https://sjfmcieunormozrybqmi.supabase.co/functions/v1/api/connect/instagram/callback`
 4. Webhooks: set the callback URL to
-   `https://svkdtymwerqjzauvsnbf.supabase.co/functions/v1/api/webhooks/instagram`, use the
+   `https://sjfmcieunormozrybqmi.supabase.co/functions/v1/api/webhooks/instagram`, use the
    verify token from the Keychain, and subscribe to `comments`.
 5. Add your own Instagram professional account as a tester to try it. Other creators can only
    connect after App Review approves `instagram_business_basic` and
@@ -232,7 +234,7 @@ The Stripe API version is pinned in `stripe.ts` (`2025-03-31.basil`).
    the lookup keys `toxoff_solo_monthly`, `toxoff_solo_annual`, `toxoff_plus_monthly` and
    `toxoff_plus_annual`. The backend finds prices by these keys; the app never names a price.
 2. Developers → Webhooks → add the endpoint
-   `https://svkdtymwerqjzauvsnbf.supabase.co/functions/v1/api/webhooks/stripe` with the events
+   `https://sjfmcieunormozrybqmi.supabase.co/functions/v1/api/webhooks/stripe` with the events
    `customer.subscription.created`, `.updated`, `.deleted`, `.paused`, `.resumed` and
    `setup_intent.succeeded`.
 3. Settings → Billing → Customer portal: allow updating the payment method and viewing invoices,
