@@ -12,6 +12,7 @@ import React, {
   useState,
 } from 'react';
 import { TRIAL_DAYS } from '../data/plans';
+import { identifyPurchaser } from '../lib/purchases';
 import { isSupabaseConfigured, supabase } from '../lib/supabase';
 import { BillingInterval, PaidPlanId, PlanId } from '../types';
 
@@ -23,13 +24,15 @@ export type AppUser = {
   name: string;
 };
 
-// The user's Stripe subscription, as the backend copies it onto their profile.
+// The user's subscription, as the backend copies it onto their profile. The app sells through the
+// App Store (src/lib/purchases.ts); 'scheduled' only ever came from Stripe, which it no longer uses.
 export type Billing = {
   status: 'scheduled' | 'active' | 'past_due'; // see profiles.billing_status (supabase/migrations)
   plan: PaidPlanId;
   interval: BillingInterval;
   periodEnd: string | null; // ISO: the next charge, or when it ends if cancelling
   cancelAtPeriodEnd: boolean;
+  store: 'app_store' | 'stripe' | null;
 };
 
 export type Subscription = {
@@ -57,7 +60,7 @@ type AuthValue = {
 };
 
 const PROFILE_COLUMNS =
-  'plan, trial_ends_at, sub_status, billing_status, billing_plan, billing_interval, billing_period_end, billing_cancel_at_period_end';
+  'plan, trial_ends_at, sub_status, billing_status, billing_plan, billing_interval, billing_period_end, billing_cancel_at_period_end, billing_store';
 
 type ProfileRow = {
   plan: PlanId | null;
@@ -68,6 +71,7 @@ type ProfileRow = {
   billing_interval: BillingInterval | null;
   billing_period_end: string | null;
   billing_cancel_at_period_end: boolean;
+  billing_store: Billing['store'];
 };
 
 const FREE: Subscription = { plan: 'free', status: 'free', trialEndsAt: null, billing: null, paying: false };
@@ -86,6 +90,7 @@ function toBilling(p: ProfileRow): Billing | null {
     interval: p.billing_interval,
     periodEnd: p.billing_period_end,
     cancelAtPeriodEnd: p.billing_cancel_at_period_end,
+    store: p.billing_store,
   };
 }
 
@@ -166,8 +171,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
     loadSubscription(userId).catch((e) => console.warn('Could not load subscription', e));
 
-    // Stripe's webhooks change the subscription on the server (renewals, failed charges, the
-    // first charge after the trial); show it as it happens.
+    // The App Store's webhooks (through RevenueCat) change the subscription on the server
+    // (renewals, cancellations, billing problems); show it as it happens.
     const channel = supabase
       .channel(`subscription:${userId}`)
       .on(
@@ -180,6 +185,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       supabase.removeChannel(channel);
     };
   }, [userId, loadSubscription]);
+
+  // Purchases belong to the toxoff user, so RevenueCat's webhooks can name them.
+  useEffect(() => {
+    identifyPurchaser(userId).catch((e) => console.warn('Could not set up purchases', e));
+  }, [userId]);
 
   const signUp = async (email: string, password: string, name: string) => {
     if (!isSupabaseConfigured) {
@@ -277,12 +287,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setSubscription(FREE);
   };
 
-  // Billing state is written by the backend (Stripe webhooks); re-read it after checkout.
+  // Billing state is written by the backend (App Store webhooks); re-read it after a purchase.
   const refreshSubscription = useCallback(async () => {
     if (isSupabaseConfigured && userId) await loadSubscription(userId);
   }, [userId, loadSubscription]);
 
-  // Demo mode stands in for Stripe here; null ends the subscription.
+  // Demo mode stands in for the App Store here; null ends the subscription.
   const setDemoBilling = (billing: Billing | null) =>
     setSubscription((s) =>
       billing

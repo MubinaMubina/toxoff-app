@@ -1,0 +1,42 @@
+TOXOFF: HOW TO DELETE YOUR DATA
+
+Effective: 14 September 2026
+
+You can stop toxoff using your Instagram, or delete all of your toxoff data, at any time.
+
+
+1. STOP TOXOFF USING YOUR INSTAGRAM
+
+Either of these stops toxoff reading and hiding comments on your posts:
+- In toxoff: open Settings > Manage accounts, then Disconnect your Instagram account. This also
+  deletes the Instagram access token toxoff kept.
+- In Instagram: open Settings > Apps and websites, choose toxoff, then Remove.
+
+
+2. DELETE YOUR TOXOFF ACCOUNT AND ALL ITS DATA
+
+Email support@toxoff.app from the email address you use with toxoff, with the subject
+"Delete my toxoff account". We will delete your account within 30 days and email you when it
+is done.
+
+This deletes:
+- your account, name and email;
+- your connected Instagram accounts and their access tokens;
+- your removed-comment history, filter settings and notification settings;
+- your plan, usage and invite history.
+
+What is kept:
+- a one-way hash (a scrambled code that cannot be turned back into the ID) of each Instagram
+  account you connected, so the same Instagram account cannot be reused to claim invite
+  rewards. It is no longer linked to you;
+- records that Apple and RevenueCat keep about purchases, under their own policies.
+
+
+3. IF YOU HAVE A SUBSCRIPTION
+
+Deleting your toxoff account does not cancel an App Store subscription. Cancel it first on your
+iPhone: Settings > [your name] > Subscriptions > toxoff > Cancel Subscription.
+
+
+Questions: support@toxoff.app
+Privacy policy: https://sjfmcieunormozrybqmi.supabase.co/storage/v1/object/public/legal/privacy.txt

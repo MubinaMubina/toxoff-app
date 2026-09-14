@@ -108,11 +108,12 @@ export async function finishConnect(req: Request): Promise<Response> {
   }
   const handle = `@${account.username}`;
 
+  // Comment webhooks only flow once the Meta app is Live with Advanced Access; until then Instagram
+  // may refuse this, and comment polling (poll.ts) picks the account's comments up instead.
   try {
     await instagram.subscribeToComments(account.accessToken);
   } catch (e) {
-    console.error('Instagram webhook subscription failed', e);
-    throw new HttpError(502, `Instagram didn't turn on comment updates for ${handle}. Please try again.`);
+    console.error(`Instagram webhook subscription failed for ${handle}; relying on polling`, e);
   }
 
   const { data: existing, error } = await db()

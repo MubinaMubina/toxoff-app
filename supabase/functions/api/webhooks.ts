@@ -2,7 +2,7 @@ import { safeEqual, verifyHmacSha256 } from './crypto.ts';
 import { env } from './env.ts';
 import { json, text } from './http.ts';
 import { commentEvents } from './instagram.ts';
-import { moderateInstagramComment } from './pipeline.ts';
+import { moderateInstagramComment, RateLimitedError } from './pipeline.ts';
 
 // Meta checks the callback URL once when webhooks are set up in the app dashboard.
 export function verifyInstagramSubscription(url: URL): Response {
@@ -35,9 +35,11 @@ export async function receiveInstagramWebhook(req: Request): Promise<Response> {
   const results = await Promise.allSettled(events.map(moderateInstagramComment));
   const outcomes = results.map((r, i) => {
     if (r.status === 'fulfilled') return r.value;
+    if (r.reason instanceof RateLimitedError) return 'rate_limited';
     console.error(`Comment ${events[i].commentId} failed`, r.reason);
     return 'error';
   });
   // An error status makes Meta deliver the batch again later; handled comments come back as duplicates.
-  return json({ outcomes }, outcomes.includes('error') ? 500 : 200);
+  const retry = outcomes.includes('error') || outcomes.includes('rate_limited');
+  return json({ outcomes }, retry ? 500 : 200);
 }

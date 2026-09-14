@@ -21,6 +21,8 @@ export function LogRow({
 }) {
   const { colors, font } = useTheme();
   const [open, setOpen] = useState(false);
+  const deleted = comment.action === 'deleted';
+  const platformName = comment.platform === 'instagram' ? 'Instagram' : 'TikTok';
 
   const toggle = () => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -82,9 +84,21 @@ export function LogRow({
             colors={colors}
             font={font}
           />
-          <DetailRow label="Removed" value={fullTimestamp(comment.createdAt)} colors={colors} font={font} />
+          <DetailRow
+            label={deleted ? 'Deleted' : 'Hidden'}
+            value={fullTimestamp(comment.createdAt)}
+            colors={colors}
+            font={font}
+          />
 
-          {comment.restored ? (
+          {deleted ? (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 }}>
+              <Ionicons name="trash-outline" size={16} color={colors.textMuted} />
+              <Text style={{ color: colors.textMuted, fontWeight: font.weight.semibold, fontSize: font.size.sm }}>
+                Deleted from {platformName}. This can’t be undone.
+              </Text>
+            </View>
+          ) : comment.restored ? (
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 }}>
               <Ionicons name="arrow-undo" size={16} color={colors.success} />
               <Text style={{ color: colors.success, fontWeight: font.weight.semibold, fontSize: font.size.sm }}>
@@ -114,9 +128,11 @@ export function LogRow({
               </Text>
             </Pressable>
           )}
-          <Text style={{ color: colors.textFaint, fontSize: font.size.xs, textAlign: 'center' }}>
-            Removed by mistake? Restoring re-publishes it on {comment.platform === 'instagram' ? 'Instagram' : 'TikTok'}.
-          </Text>
+          {!deleted && (
+            <Text style={{ color: colors.textFaint, fontSize: font.size.xs, textAlign: 'center' }}>
+              Removed by mistake? Restoring re-publishes it on {platformName}.
+            </Text>
+          )}
         </View>
       )}
     </Pressable>

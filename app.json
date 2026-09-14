@@ -51,13 +51,6 @@
           "color": "#534AB7"
         }
       ],
-      [
-        "@stripe/stripe-react-native",
-        {
-          "merchantIdentifier": "merchant.com.toxoff.app",
-          "enableGooglePay": true
-        }
-      ],
       "expo-font",
       "expo-asset",
       "expo-apple-authentication"

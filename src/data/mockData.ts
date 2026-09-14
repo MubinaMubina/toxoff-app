@@ -16,7 +16,7 @@ export const MOCK_ACCOUNTS: ConnectedAccount[] = [
   },
 ];
 
-export const MOCK_FREE_COMMENTS_USED = 37;
+export const MOCK_FREE_COMMENTS_USED = 12;
 
 export const DEFAULT_FILTERS: FilterSettings = {
   sensitivity: 'medium',
@@ -24,11 +24,12 @@ export const DEFAULT_FILTERS: FilterSettings = {
     hate_speech: true,
     harassment: true,
     slurs: true,
-    spam: true,
+    spam: false, // opt-in: the spam check is signal-based and can catch genuine comments
     self_harm: true,
   },
   keywords: ['scamlink.biz', 'free followers'],
   blockedUsers: ['troll_acct_99'],
+  flaggedAction: 'auto',
 };
 
 export const MOCK_REMOVED: RemovedComment[] = [

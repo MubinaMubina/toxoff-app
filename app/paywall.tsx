@@ -1,101 +1,110 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
-import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, Pressable, ScrollView, Text, View } from 'react-native';
+import type { PurchasesPackage } from 'react-native-purchases';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Badge, Button, H1, HeaderButton, Segmented } from '../src/components/ui';
 import { useAuth } from '../src/context/AuthContext';
-import { useRegion } from '../src/context/RegionContext';
 import { getPlan, PAID_PLANS } from '../src/data/plans';
+import { formatUsd, listAnnualTotal, listPrice } from '../src/data/pricing';
 import {
-  annualTotal,
-  formatPrice,
-  METHOD_LABEL,
-  priceFor,
-} from '../src/data/pricing';
-import { startSubscription } from '../src/lib/billing';
+  loadStorePackages,
+  manageSubscription,
+  productId,
+  purchasePlan,
+  restorePurchases,
+} from '../src/lib/purchases';
+import { openLink, PRIVACY_URL, TERMS_URL } from '../src/lib/links';
 import { shortDate } from '../src/lib/time';
 import { useTheme } from '../src/theme/ThemeContext';
-import { BillingInterval, PaidPlanId, PaymentMethod } from '../src/types';
-
-const METHOD_ICON: Record<string, keyof typeof Ionicons.glyphMap> = {
-  card: 'card-outline',
-  apple_pay: 'logo-apple',
-  google_pay: 'logo-google',
-  jazzcash: 'phone-portrait-outline',
-  easypaisa: 'wallet-outline',
-  bank: 'business-outline',
-};
+import { BillingInterval, PaidPlanId } from '../src/types';
 
 export default function Paywall() {
-  const { colors, font, radius, spacing, isDark } = useTheme();
+  const { colors, font, radius, spacing } = useTheme();
   const router = useRouter();
   const { user, subscription, refreshSubscription, setDemoBilling } = useAuth();
-  const { region, chooseRegion } = useRegion();
   const billing = subscription.billing;
 
   // Opens on the plan the user already has, if any.
   const [interval, setInterval] = useState<BillingInterval>(billing?.interval ?? 'monthly');
   const [selected, setSelected] = useState<PaidPlanId>(billing?.plan ?? 'plus');
-  const [method, setMethod] = useState<PaymentMethod>(region.methods[0]);
-  const [loading, setLoading] = useState(false);
+  const [packages, setPackages] = useState<Map<string, PurchasesPackage>>(new Map());
+  const [busy, setBusy] = useState<'buy' | 'restore' | null>(null);
+
+  // The App Store's prices, in the user's own currency. Until they load (or in Expo Go), list prices.
+  useEffect(() => {
+    loadStorePackages()
+      .then(setPackages)
+      .catch((e) => console.warn('Could not load App Store prices', e));
+  }, []);
 
   const selectedName = getPlan(selected).name;
   const trialEnd =
     subscription.status === 'trialing' && subscription.trialEndsAt
       ? shortDate(subscription.trialEndsAt)
       : null;
-  const scheduled = billing?.status === 'scheduled';
   const cancelling = billing?.cancelAtPeriodEnd ?? false;
-  // The plan the user pays for (or has chosen for after the trial), if any.
+  // The plan the user pays for, if any.
   const paidPlan = billing?.plan ?? (subscription.status === 'active' ? subscription.plan : null);
   const onSelected = billing
     ? billing.plan === selected && billing.interval === interval
     : paidPlan === selected;
   const isCurrentPlan = onSelected && !cancelling;
   const ctaLabel = isCurrentPlan
-    ? scheduled
-      ? 'Starts when your trial ends'
-      : 'Your current plan'
+    ? 'Your current plan'
     : onSelected
-      ? `Keep ${selectedName}` // cancelling: this takes it back
+      ? `Keep ${selectedName}` // cancelled: renewal is turned back on in Apple's settings
       : paidPlan === selected
         ? `Switch to ${interval} billing`
         : paidPlan
           ? `Switch to ${selectedName}`
-          : subscription.status === 'trialing'
-            ? `Choose ${selectedName}`
+          : trialEnd
+            ? `Start ${selectedName} now`
             : `Upgrade to ${selectedName}`;
 
   const subtitle =
-    scheduled && trialEnd
-      ? `${getPlan(billing!.plan).name} starts ${trialEnd}, when your free trial ends. You won’t be charged before then.`
-      : trialEnd
-        ? `Your free trial ends ${trialEnd}. Pick a plan now — you won’t be charged until then.`
-        : cancelling && billing?.periodEnd
-          ? `Your ${getPlan(billing.plan).name} plan ends ${shortDate(billing.periodEnd)}. Choose a plan to keep going.`
-          : subscription.status === 'free'
-            ? 'Unlimited moderation, more accounts, and custom rules. Cancel anytime.'
-            : 'Change your plan anytime.';
+    trialEnd && !paidPlan
+      ? `Your free trial ends ${trialEnd}. Subscribing ends it early and starts your plan today.`
+      : cancelling && billing?.periodEnd
+        ? `Your ${getPlan(billing.plan).name} plan ends ${shortDate(billing.periodEnd)}. Choose a plan to keep going.`
+        : subscription.status === 'free'
+          ? 'Unlimited moderation, more accounts, and custom rules. Cancel anytime.'
+          : 'Change your plan anytime.';
 
-  // A new region can have different payment methods, so start from its first one.
-  const changeRegion = () => chooseRegion((next) => setMethod(next.methods[0]));
+  const priceOf = (plan: PaidPlanId) => {
+    const product = packages.get(productId(plan, interval))?.product;
+    if (product) {
+      return interval === 'monthly'
+        ? { amount: product.priceString, unit: '/mo', note: null }
+        : {
+            amount: product.priceString,
+            unit: '/yr',
+            note: product.pricePerMonthString
+              ? `${product.pricePerMonthString}/mo · 2 months free`
+              : '2 months free',
+          };
+    }
+    return {
+      amount: formatUsd(listPrice(plan, interval)),
+      unit: '/mo',
+      note: interval === 'annual' ? `${formatUsd(listAnnualTotal(plan))} billed yearly · 2 months free` : null,
+    };
+  };
 
   const subscribe = async () => {
     if (!user) {
       router.push('/(auth)/signup');
       return;
     }
-    setLoading(true);
+    setBusy('buy');
     try {
-      const result = await startSubscription({
-        planId: selected,
-        interval,
-        region,
-        method,
-        email: user.email,
-        dark: isDark,
-      });
+      if (onSelected && cancelling) {
+        await manageSubscription();
+        await refreshSubscription();
+        return;
+      }
+      const result = await purchasePlan(selected, interval, packages);
       if (result.status === 'cancelled') return;
       if (result.status === 'demo') {
         const periodEnd = new Date();
@@ -107,29 +116,40 @@ export default function Paywall() {
           interval,
           periodEnd: periodEnd.toISOString(),
           cancelAtPeriodEnd: false,
+          store: 'app_store',
         });
       } else {
         await refreshSubscription();
       }
       Alert.alert(
-        result.status === 'changed' ? 'Plan updated' : 'You’re all set 🎉',
+        paidPlan ? 'Plan updated' : 'You’re all set 🎉',
         result.status === 'demo'
-          ? `Demo mode: you're on ${selectedName}. Connect a real ${region.provider === 'safepay' ? 'Safepay' : 'Stripe'} backend to take live payments.`
-          : result.status === 'changed'
-            ? onSelected
-              ? `${selectedName} will keep renewing.`
-              : scheduled && trialEnd
-                ? `${selectedName} starts ${trialEnd}, when your free trial ends, billed ${interval === 'annual' ? 'yearly' : 'monthly'}.`
-                : `You're now on ${selectedName}, billed ${interval === 'annual' ? 'yearly' : 'monthly'}.`
-            : result.startsLater && trialEnd
-              ? `${selectedName} starts ${trialEnd}, when your free trial ends. You won’t be charged before then.`
-              : `You're on ${selectedName}.`
+          ? `Demo mode: you're on ${selectedName}. Real purchases work in the App Store build.`
+          : paidPlan
+            ? `You're switching to ${selectedName}. Upgrades start right away; other changes start when your current period ends.`
+            : `You're on ${selectedName}.`
       );
       router.back();
     } catch (e: any) {
-      Alert.alert('Payment error', e?.message ?? 'Something went wrong.');
+      Alert.alert('Purchase didn’t go through', e?.message ?? 'Something went wrong. Please try again.');
     } finally {
-      setLoading(false);
+      setBusy(null);
+    }
+  };
+
+  const restore = async () => {
+    setBusy('restore');
+    try {
+      if ((await restorePurchases()).status === 'demo') {
+        Alert.alert('Demo mode', 'Restoring purchases works in the App Store build.');
+        return;
+      }
+      await refreshSubscription();
+      Alert.alert('Purchases restored', 'If this Apple ID has a toxoff subscription, it’s active again.');
+    } catch (e: any) {
+      Alert.alert('Couldn’t restore purchases', e?.message ?? 'Please try again.');
+    } finally {
+      setBusy(null);
     }
   };
 
@@ -145,30 +165,6 @@ export default function Paywall() {
         <Text style={{ color: colors.textMuted, fontSize: font.size.md, marginTop: 6, lineHeight: 21 }}>
           {subtitle}
         </Text>
-
-        {/* Region indicator */}
-        <Pressable
-          onPress={changeRegion}
-          style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: 6,
-            alignSelf: 'flex-start',
-            marginTop: 14,
-            backgroundColor: colors.surfaceAlt,
-            paddingHorizontal: 12,
-            paddingVertical: 7,
-            borderRadius: radius.pill,
-          }}
-        >
-          <Ionicons name="location-outline" size={14} color={colors.textMuted} />
-          <Text style={{ color: colors.textMuted, fontSize: font.size.sm }}>
-            {region.country} · {region.currency}
-          </Text>
-          <Text style={{ color: colors.primary, fontSize: font.size.sm, fontWeight: font.weight.semibold }}>
-            Change
-          </Text>
-        </Pressable>
 
         {/* Billing interval */}
         <View style={{ marginTop: 18 }}>
@@ -186,7 +182,7 @@ export default function Paywall() {
         <View style={{ gap: 14, marginTop: 18 }}>
           {PAID_PLANS.map((plan) => {
             const active = selected === plan.id;
-            const perMonth = priceFor(region, plan.id, interval);
+            const price = priceOf(plan.id);
             return (
               <Pressable
                 key={plan.id}
@@ -219,26 +215,20 @@ export default function Paywall() {
 
                 <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 4, marginTop: 12 }}>
                   <Text style={{ color: colors.text, fontSize: font.size.huge, fontWeight: font.weight.heavy }}>
-                    {formatPrice(region, perMonth)}
+                    {price.amount}
                   </Text>
-                  <Text style={{ color: colors.textMuted, fontSize: font.size.md }}>/mo</Text>
+                  <Text style={{ color: colors.textMuted, fontSize: font.size.md }}>{price.unit}</Text>
                   <View style={{ flex: 1 }} />
                   {paidPlan === plan.id && (
                     // Centred on the price (Badge alone would sit at the top of this baseline row).
                     <View style={{ alignSelf: 'center' }}>
-                      <Badge
-                        label={scheduled && billing?.periodEnd ? `Starts ${shortDate(billing.periodEnd)}` : 'Current plan'}
-                        color={colors.success}
-                        bg={colors.successSoft}
-                      />
+                      <Badge label="Current plan" color={colors.success} bg={colors.successSoft} />
                     </View>
                   )}
                 </View>
 
-                {interval === 'annual' && (
-                  <Text style={{ color: colors.primary, fontSize: font.size.xs, marginTop: 2 }}>
-                    {formatPrice(region, annualTotal(region, plan.id))} billed yearly · 2 months free
-                  </Text>
+                {price.note && (
+                  <Text style={{ color: colors.primary, fontSize: font.size.xs, marginTop: 2 }}>{price.note}</Text>
                 )}
 
                 <View style={{ marginTop: 14, gap: 8 }}>
@@ -255,65 +245,48 @@ export default function Paywall() {
           })}
         </View>
 
-        {/* Payment methods. Stripe's payment sheet offers its own (card, and Apple Pay or Google Pay
-            where set up), so the choice here is only for Safepay's JazzCash and Easypaisa. */}
-        {region.provider === 'safepay' && (
-          <>
-            <Text
-              style={{
-                color: colors.textMuted,
-                fontSize: font.size.xs,
-                fontWeight: font.weight.semibold,
-                letterSpacing: 0.6,
-                textTransform: 'uppercase',
-                marginTop: 24,
-                marginBottom: 10,
-              }}
-            >
-              Pay with
+        {/* The App Store's required subscription terms. */}
+        <Text style={{ color: colors.textMuted, fontSize: font.size.xs, lineHeight: 17, marginTop: 20 }}>
+          Paid with the payment method on your Apple ID. Subscriptions renew automatically unless you cancel
+          at least 24 hours before the end of the period. Manage or cancel anytime in your App Store
+          account settings.
+        </Text>
+        <View style={{ flexDirection: 'row', gap: 16, marginTop: 10 }}>
+          <Pressable onPress={() => openLink(TERMS_URL)} accessibilityRole="link" hitSlop={10}>
+            <Text style={{ color: colors.primary, fontSize: font.size.xs, fontWeight: font.weight.semibold }}>
+              Terms of Use
             </Text>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-              {region.methods.map((m) => {
-                const active = method === m;
-                return (
-                  <Pressable
-                    key={m}
-                    onPress={() => setMethod(m)}
-                    style={{
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      gap: 7,
-                      paddingHorizontal: 14,
-                      paddingVertical: 10,
-                      borderRadius: radius.md,
-                      borderWidth: 1.5,
-                      borderColor: active ? colors.primary : colors.border,
-                      backgroundColor: active ? colors.primarySoft : colors.card,
-                    }}
-                  >
-                    <Ionicons name={METHOD_ICON[m]} size={17} color={active ? colors.primary : colors.textMuted} />
-                    <Text
-                      style={{
-                        color: active ? colors.primary : colors.text,
-                        fontSize: font.size.sm,
-                        fontWeight: font.weight.medium,
-                      }}
-                    >
-                      {METHOD_LABEL[m]}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-          </>
-        )}
+          </Pressable>
+          <Pressable onPress={() => openLink(PRIVACY_URL)} accessibilityRole="link" hitSlop={10}>
+            <Text style={{ color: colors.primary, fontSize: font.size.xs, fontWeight: font.weight.semibold }}>
+              Privacy Policy
+            </Text>
+          </Pressable>
+        </View>
       </ScrollView>
 
       <View style={{ paddingHorizontal: spacing.gutter, paddingBottom: 16, paddingTop: 8, borderTopWidth: 0.5, borderTopColor: colors.border }}>
-        <Button label={ctaLabel} onPress={subscribe} loading={loading} disabled={isCurrentPlan} />
-        <Text style={{ color: colors.textFaint, fontSize: font.size.xs, textAlign: 'center', marginTop: 10 }}>
-          Powered by {region.provider === 'safepay' ? 'Safepay' : 'Stripe'} · Secure payments
-        </Text>
+        <Button
+          label={ctaLabel}
+          onPress={subscribe}
+          loading={busy === 'buy'}
+          disabled={isCurrentPlan || busy === 'restore'}
+        />
+        <Pressable
+          onPress={restore}
+          disabled={busy !== null}
+          accessibilityRole="button"
+          hitSlop={{ top: 10, bottom: 10, left: 16, right: 16 }}
+          style={{ alignSelf: 'center', marginTop: 12, minHeight: 20, justifyContent: 'center' }}
+        >
+          {busy === 'restore' ? (
+            <ActivityIndicator size="small" color={colors.primary} />
+          ) : (
+            <Text style={{ color: colors.primary, fontSize: font.size.sm, fontWeight: font.weight.semibold }}>
+              Restore purchases
+            </Text>
+          )}
+        </Pressable>
       </View>
     </SafeAreaView>
   );

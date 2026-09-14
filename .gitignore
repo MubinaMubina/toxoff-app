@@ -37,3 +37,6 @@ play-service-account.json
 # IDE
 .vscode/
 *.log
+
+# Claude Code local permission allowlists
+.claude/

@@ -2,16 +2,21 @@
 //   deno test --allow-env --config supabase/functions/api/deno.json supabase/functions/tests
 import { assert, assertEquals, assertRejects, assertThrows } from '@std/assert';
 import { billingState, lookupKey, planOfPrice } from '../api/billing.ts';
-import { ClassifierError, classify, spamScore } from '../api/classifier.ts';
+import { ClassifierError, classify, hasWords, isPlainEnglish, spamScore } from '../api/classifier.ts';
 import { safeEqual, seal, unseal, verifyHmacSha256 } from '../api/crypto.ts';
 import {
   authorizeUrl,
   commentEvents,
+  deleteComment,
   exchangeCode,
   InstagramError,
+  parseTime,
+  polledCommentEvents,
+  recentComments,
   setCommentHidden,
 } from '../api/instagram.ts';
-import { containsTerm, decide, type FilterSettings } from '../api/moderation.ts';
+import { chooseAction, containsTerm, decide, type FilterSettings } from '../api/moderation.ts';
+import { eventUsers, planOfProduct, storeBillingState } from '../api/store.ts';
 import {
   createCustomer,
   formEncode,
@@ -43,8 +48,8 @@ function stubFetch(respond: (url: URL, init?: RequestInit) => Response) {
 
 Deno.test('decide: blocked users and keywords win, case-insensitive, with or without @', () => {
   const f = { ...FILTERS, blockedUsers: ['@Troll99'], keywords: ['scam'] };
-  assertEquals(decide('hi', 'troll99', {}, f), { remove: true, reason: 'harassment', confidence: 1 });
-  assertEquals(decide('total SCAM!', 'fan', {}, f), { remove: true, reason: 'slurs', confidence: 1 });
+  assertEquals(decide('hi', 'troll99', {}, f), { remove: true, reason: 'harassment', confidence: 1, byRule: true });
+  assertEquals(decide('total SCAM!', 'fan', {}, f), { remove: true, reason: 'slurs', confidence: 1, byRule: true });
   assertEquals(decide('scampi recipe please', 'fan', {}, f).remove, false);
 });
 
@@ -82,46 +87,149 @@ Deno.test('spamScore: one signal stays under the default threshold, two go over'
   assert(spamScore('a'.repeat(50)) === 0);
 });
 
-Deno.test('classify: maps OpenAI categories to toxoff reasons and adds spam', async () => {
-  const stub = stubFetch(() =>
-    Response.json({
-      results: [{
-        category_scores: {
-          'harassment': 0.4,
-          'harassment/threatening': 0.8,
-          'sexual': 0.9,
-          'hate': 0.1,
-          'violence': 0.99,
-          'illicit': 0.9,
-          'self-harm/intent': 0.7,
-          'sexual/minors': 0.02,
-        },
-      }],
-    })
-  );
+const modelAnswer = (scores: Record<string, number>, language = 'Roman Urdu') =>
+  Response.json({ choices: [{ message: { content: JSON.stringify({ harassment: 0, hate_speech: 0, slurs: 0, spam: 0, self_harm: 0, language, ...scores }) } }], usage: {} });
+
+const moderationAnswer = (scores: Record<string, number>) => Response.json({ results: [{ category_scores: scores }] });
+
+Deno.test('classify: asks the GPT model for scores in any language, adds the spam signal', async () => {
+  const stub = stubFetch(() => modelAnswer({ harassment: 45, slurs: 60 }));
   try {
-    const scores = await classify('DM me for promo www.x.shop', 'sk-test');
-    assertEquals(scores.harassment, 0.9); // max of harassment, threatening and sexual
-    assertEquals(scores.hate_speech, 0.1);
-    assertEquals(scores.self_harm, 0.7);
-    assertEquals(scores.toxicity, 0.02);
-    assert((scores.spam ?? 0) >= 0.6);
+    const { scores, language, source } = await classify('Kia chutiyapa hai, check my bio', 'sk-test');
+    assertEquals([scores.harassment, scores.slurs, scores.hate_speech, scores.self_harm], [0.45, 0.6, 0, 0]);
+    assertEquals(scores.spam, 0.35); // the signal score wins over the model's 0
+    assertEquals([language, source], ['Roman Urdu', 'model']);
     const call = stub.calls[0];
-    assertEquals(call.url.href, 'https://api.openai.com/v1/moderations');
+    assertEquals(call.url.href, 'https://api.openai.com/v1/chat/completions');
     assertEquals(new Headers(call.init?.headers).get('Authorization'), 'Bearer sk-test');
-    assertEquals(JSON.parse(String(call.init?.body)).model, 'omni-moderation-latest');
+    const body = JSON.parse(String(call.init?.body));
+    assertEquals([body.model, body.reasoning_effort, body.response_format.type, body.messages[1].content], ['gpt-5.4-nano', 'low', 'json_schema', 'Kia chutiyapa hai, check my bio']);
+    assertEquals(stub.calls.length, 1); // no pre-filter call: Roman Urdu goes straight to the model
   } finally {
     stub.restore();
   }
 });
 
-Deno.test('classify: OpenAI errors are thrown so the webhook is retried', async () => {
-  const stub = stubFetch(() => new Response('overloaded', { status: 503 }));
+Deno.test('classify: falls back to the moderation endpoint when the model fails', async () => {
+  const stub = stubFetch((url) =>
+    url.pathname === '/v1/chat/completions'
+      ? new Response('overloaded', { status: 503 })
+      : moderationAnswer({ 'harassment/threatening': 0.8, 'hate': 0.1, 'violence': 0.99 })
+  );
+  try {
+    const { scores, language, source } = await classify('threat', 'sk-test', 'gpt-5.4-mini');
+    assertEquals([scores.harassment, scores.hate_speech, scores.toxicity, language, source], [0.8, 0.1, undefined, null, 'fallback']);
+    assertEquals(stub.calls.map((c) => c.url.pathname), ['/v1/chat/completions', '/v1/moderations']);
+  } finally {
+    stub.restore();
+  }
+});
+
+Deno.test('classify: errors from both are thrown so the comment is retried later', async () => {
+  const stub = stubFetch(() => new Response('down', { status: 503 }));
   try {
     await assertRejects(() => classify('hi', 'sk-test'), ClassifierError);
   } finally {
     stub.restore();
   }
+});
+
+Deno.test('classify: emoji, @mentions and obvious spam are settled by rules, no API call', async () => {
+  const stub = stubFetch(() => new Response('should not be called', { status: 500 }));
+  try {
+    let beforeModelCalls = 0;
+    const beforeModel = () => Promise.resolve(void beforeModelCalls++);
+    assertEquals(await classify('@bestie @friend 🔥🔥 ❤️', 'sk-test', undefined, { beforeModel }), { scores: { spam: 0 }, language: null, source: 'rules' });
+    assertEquals(await classify('1000', 'sk-test'), { scores: { spam: 0 }, language: null, source: 'rules' });
+    const spam = await classify('DM me for promo, link in bio www.cheapfollowers.shop', 'sk-test', undefined, { beforeModel });
+    assertEquals([spam.source, spam.language], ['rules', null]);
+    assert((spam.scores.spam ?? 0) >= 0.7);
+    assertEquals([stub.calls.length, beforeModelCalls], [0, 0]);
+  } finally {
+    stub.restore();
+  }
+});
+
+Deno.test('classify: plain English takes the free endpoint when it is sure either way', async () => {
+  const stub = stubFetch((url) =>
+    url.pathname === '/v1/moderations'
+      ? moderationAnswer({ harassment: 0.001, hate: 0.0002, 'self-harm': 0.0001, violence: 0.3 })
+      : new Response('model should not be called', { status: 500 })
+  );
+  try {
+    const clean = await classify('SIUUUU 🐐 best player ever', 'sk-test');
+    assertEquals([clean.source, clean.language, clean.scores.harassment, clean.scores.spam], ['moderation', 'English', 0.001, undefined]);
+    assertEquals(stub.calls.map((c) => c.url.pathname), ['/v1/moderations']);
+    assertEquals(JSON.parse(String(stub.calls[0].init?.body)).input, 'SIUUUU 🐐 best player ever');
+  } finally {
+    stub.restore();
+  }
+  const abusive = stubFetch((url) =>
+    url.pathname === '/v1/moderations'
+      ? moderationAnswer({ harassment: 0.97, 'harassment/threatening': 0.2, hate: 0.01 })
+      : new Response('model should not be called', { status: 500 })
+  );
+  try {
+    const result = await classify('you are a stupid ugly loser', 'sk-test');
+    assertEquals([result.source, result.language, result.scores.harassment, result.scores.hate_speech], ['moderation', 'English', 0.97, 0.01]);
+    assertEquals(abusive.calls.length, 1);
+  } finally {
+    abusive.restore();
+  }
+});
+
+Deno.test('classify: the grey zone and anything not plain English go to the model', async () => {
+  const stub = stubFetch((url) =>
+    url.pathname === '/v1/moderations' ? moderationAnswer({ harassment: 0.5 }) : modelAnswer({ harassment: 80 }, 'English')
+  );
+  try {
+    let beforeModelCalls = 0;
+    const beforeModel = () => Promise.resolve(void beforeModelCalls++);
+    const grey = await classify('you are so fat', 'sk-test', undefined, { beforeModel });
+    assertEquals([grey.source, grey.scores.harassment, beforeModelCalls], ['model', 0.8, 1]);
+    assertEquals(stub.calls.map((c) => c.url.pathname), ['/v1/moderations', '/v1/chat/completions']);
+
+    stub.calls.length = 0;
+    await classify('you are a kutta', 'sk-test', undefined, { beforeModel }); // one unknown word is enough
+    await classify('tum bahut ganday ho', 'sk-test', undefined, { beforeModel });
+    await classify('تم بہت برے ہو', 'sk-test', undefined, { beforeModel });
+    assertEquals(stub.calls.map((c) => c.url.pathname), ['/v1/chat/completions', '/v1/chat/completions', '/v1/chat/completions']);
+    assertEquals(beforeModelCalls, 4);
+  } finally {
+    stub.restore();
+  }
+});
+
+Deno.test('classify: a failing pre-filter call is skipped, a failing beforeModel is not', async () => {
+  const stub = stubFetch((url) =>
+    url.pathname === '/v1/moderations' ? new Response('down', { status: 503 }) : modelAnswer({ harassment: 10 }, 'English')
+  );
+  try {
+    const result = await classify('best player ever', 'sk-test');
+    assertEquals([result.source, result.scores.harassment], ['model', 0.1]);
+    assertEquals(stub.calls.map((c) => c.url.pathname), ['/v1/moderations', '/v1/chat/completions']);
+
+    stub.calls.length = 0;
+    class Limited extends Error {}
+    await assertRejects(() => classify('tum bahut ganday ho', 'sk-test', undefined, { beforeModel: () => Promise.reject(new Limited()) }), Limited);
+    assertEquals(stub.calls.length, 0); // no fallback call either: the comment is simply retried later
+  } finally {
+    stub.restore();
+  }
+});
+
+Deno.test('hasWords / isPlainEnglish: what the pre-filter can settle without the model', () => {
+  assert(hasWords('nice'));
+  assert(!hasWords('@friend @bestie 🔥 123'));
+  assert(hasWords('#loser'));
+  assert(isPlainEnglish("You're the best, love you!!! 😍"));
+  assert(isPlainEnglish('GOOOOAL SIUUU'));
+  assert(isPlainEnglish('@ronaldo best player ever'));
+  assert(!isPlainEnglish('you are a kutta'));
+  assert(!isPlainEnglish('eres el mejor'));
+  assert(!isPlainEnglish('café'));
+  assert(!isPlainEnglish('تم بہت برے ہو'));
+  assert(!isPlainEnglish('🔥🔥'));
 });
 
 Deno.test('commentEvents: reads comments and replies, ignores everything else', () => {
@@ -154,6 +262,65 @@ Deno.test('commentEvents: reads comments and replies, ignores everything else', 
   ]);
   assertEquals(commentEvents({ object: 'page', entry: [] }), []);
   assertEquals(commentEvents(null), []);
+});
+
+Deno.test('parseTime reads Instagram timestamps', () => {
+  assertEquals(parseTime('2026-09-14T10:00:00+0000'), Date.UTC(2026, 8, 14, 10));
+  assertEquals(parseTime('2026-09-14T15:00:00+0500'), Date.UTC(2026, 8, 14, 10));
+  assertEquals(parseTime('2026-09-14T10:00:00Z'), Date.UTC(2026, 8, 14, 10));
+});
+
+Deno.test('polledCommentEvents: new, visible comments and replies by others, oldest first', () => {
+  const since = Date.UTC(2026, 8, 14, 10);
+  const at = (minutes: number) => new Date(since + minutes * 60_000).toISOString().replace('.000Z', '+0000');
+  const events = polledCommentEvents(
+    { platformUserId: '1784', handle: '@MyShop' },
+    { id: 'm1', media_product_type: 'REELS' },
+    [
+      {
+        id: 'c3',
+        text: 'newest',
+        timestamp: at(9),
+        from: { id: '99', username: 'fan' },
+        replies: {
+          data: [
+            { id: 'r1', text: 'reply', timestamp: at(10), from: { id: '98', username: 'other' } },
+            { id: 'r2', text: 'thanks!', timestamp: at(11), from: { id: '1784', username: 'myshop' } }, // own reply
+          ],
+        },
+      },
+      { id: 'c2', text: 'already hidden', timestamp: at(5), hidden: true, from: { id: '97', username: 'x' } },
+      { id: 'c1', text: 'first', timestamp: at(1), username: 'legacy' }, // no `from`
+      { id: 'c0', text: 'before the cursor', timestamp: at(-1), from: { id: '96', username: 'y' } },
+      { id: 'c4', timestamp: at(2) }, // no text
+    ],
+    since
+  );
+  assertEquals(events, [
+    { accountId: '1784', commentId: 'c1', text: 'first', authorId: null, authorUsername: 'legacy', mediaId: 'm1', mediaType: 'REELS' },
+    { accountId: '1784', commentId: 'c3', text: 'newest', authorId: '99', authorUsername: 'fan', mediaId: 'm1', mediaType: 'REELS' },
+    { accountId: '1784', commentId: 'r1', text: 'reply', authorId: '98', authorUsername: 'other', mediaId: 'm1', mediaType: 'REELS' },
+  ]);
+});
+
+Deno.test('recentComments: pages newest first and stops at the cursor', async () => {
+  const since = Date.UTC(2026, 8, 14, 10);
+  const page = (id: string, minutes: number) => ({ id, text: id, timestamp: new Date(since + minutes * 60_000).toISOString() });
+  const stub = stubFetch((url) =>
+    url.searchParams.get('after') === 'p2'
+      ? Response.json({ data: [page('c2', 1), page('c1', -5)], paging: { next: 'https://graph.instagram.com/v23.0/m1/comments?after=p3' } })
+      : Response.json({ data: [page('c4', 9), page('c3', 5)], paging: { next: 'https://graph.instagram.com/v23.0/m1/comments?after=p2' } })
+  );
+  try {
+    const comments = await recentComments('m1', 'tok', since);
+    assertEquals(comments.map((c) => c.id), ['c4', 'c3', 'c2', 'c1']);
+    assertEquals(stub.calls.length, 2); // p3 is never asked for
+    const first = stub.calls[0].url;
+    assertEquals(first.pathname, '/v23.0/m1/comments');
+    assert(first.searchParams.get('fields')?.includes('replies{id,text,timestamp,hidden,from,username}'));
+  } finally {
+    stub.restore();
+  }
 });
 
 Deno.test('verifyHmacSha256: accepts Meta signatures, rejects anything else', async () => {
@@ -353,4 +520,90 @@ Deno.test('billingState: Stripe statuses as the app sees them', () => {
   const legacy = subscription({ current_period_end: 1_790_000_000, items: { data: [{ id: 'si_1', price: { id: 'price_1', lookup_key: 'toxoff_plus_annual' } }] } });
   assertEquals(billingState(legacy, false), { status: 'active', plan: 'plus', interval: 'annual', periodEnd: at(1_790_000_000), cancelAtPeriodEnd: false });
   assertThrows(() => billingState(subscription({ items: { data: [{ id: 'si_1', price: { id: 'price_x', lookup_key: null } }] } }), false));
+});
+
+// ---------- App Store (RevenueCat) ----------
+
+Deno.test('planOfProduct reads toxoff App Store (and Play) product ids only', () => {
+  assertEquals(planOfProduct('toxoff_plus_annual'), { plan: 'plus', interval: 'annual' });
+  assertEquals(planOfProduct('toxoff_solo_monthly:base'), { plan: 'solo', interval: 'monthly' });
+  assertEquals(planOfProduct('toxoff_gold_monthly'), null);
+  assertEquals(planOfProduct('com.other.app.monthly'), null);
+});
+
+Deno.test('storeBillingState: App Store subscriptions as the app sees them', () => {
+  const now = Date.UTC(2026, 8, 14);
+  const at = (days: number) => new Date(now + days * 86_400_000).toISOString();
+  assertEquals(storeBillingState({}, now), { status: 'none', plan: null, interval: null, periodEnd: null, cancelAtPeriodEnd: false });
+  assertEquals(storeBillingState({ toxoff_solo_monthly: { expires_date: at(20) } }, now), {
+    status: 'active', plan: 'solo', interval: 'monthly', periodEnd: at(20), cancelAtPeriodEnd: false,
+  });
+  // Turned off auto-renew in Apple's settings: still on until it ends.
+  assertEquals(storeBillingState({ toxoff_plus_annual: { expires_date: at(100), unsubscribe_detected_at: at(-1) } }, now).cancelAtPeriodEnd, true);
+  // Expired, refunded, or not a toxoff product: none.
+  assertEquals(storeBillingState({ toxoff_solo_monthly: { expires_date: at(-1) } }, now).status, 'none');
+  assertEquals(storeBillingState({ toxoff_solo_monthly: { expires_date: at(5), refunded_at: at(-1) } }, now).status, 'none');
+  assertEquals(storeBillingState({ other_product: { expires_date: at(5) } }, now).status, 'none');
+  // Billing problem: Apple's grace period keeps it on, as past_due.
+  const grace = storeBillingState({ toxoff_plus_monthly: { expires_date: at(-1), grace_period_expires_date: at(6), billing_issues_detected_at: at(-1) } }, now);
+  assertEquals([grace.status, grace.plan], ['past_due', 'plus']);
+  // A billing problem after the grace period: none.
+  assertEquals(storeBillingState({ toxoff_plus_monthly: { expires_date: at(-10), grace_period_expires_date: at(-4), billing_issues_detected_at: at(-12) } }, now).status, 'none');
+  // Overlap while switching plans: Plus wins over Solo, then the one running longest.
+  assertEquals(storeBillingState({ toxoff_solo_annual: { expires_date: at(300) }, toxoff_plus_monthly: { expires_date: at(30) } }, now).plan, 'plus');
+  assertEquals(storeBillingState({ toxoff_solo_monthly: { expires_date: at(3) }, toxoff_solo_annual: { expires_date: at(300) } }, now).interval, 'annual');
+});
+
+Deno.test('eventUsers: toxoff user ids from every id field, anonymous ids skipped', () => {
+  const a = '6f1c2d3e-4b5a-4c6d-8e7f-9a0b1c2d3e4f';
+  const b = '0a1b2c3d-4e5f-4a6b-8c7d-8e9f0a1b2c3d';
+  assertEquals(eventUsers({ app_user_id: a, original_app_user_id: '$RCAnonymousID:abc', aliases: [a, '$RCAnonymousID:abc'] }), [a]);
+  assertEquals(eventUsers({ type: 'TRANSFER', transferred_from: [a], transferred_to: [b] }), [a, b]);
+  assertEquals(eventUsers({ type: 'TEST', app_user_id: 'test_user' }), []);
+});
+
+Deno.test('fetchWithRetry: reads are tried once more on a gateway error, writes never', async () => {
+  const { fetchWithRetry } = await import('../api/db.ts');
+  let status = 504;
+  const stub = stubFetch(() => new Response('', { status: status === 504 ? (status = 200, 504) : 200 }));
+  try {
+    assertEquals((await fetchWithRetry('https://p.supabase.co/rest/v1/x')).status, 200);
+    assertEquals(stub.calls.length, 2);
+    status = 504;
+    assertEquals((await fetchWithRetry('https://p.supabase.co/rest/v1/rpc/claim_comment', { method: 'POST' })).status, 504);
+    assertEquals(stub.calls.length, 3);
+  } finally {
+    stub.restore();
+  }
+});
+
+Deno.test("deleteComment: DELETE on the comment, errors like hiding", async () => {
+  const stub = stubFetch(() => Response.json({ success: true }));
+  try {
+    await deleteComment("c9", "tok");
+    const { url, init } = stub.calls[0];
+    assertEquals([url.pathname, url.searchParams.get("access_token"), init?.method], ["/v23.0/c9", "tok", "DELETE"]);
+  } finally {
+    stub.restore();
+  }
+  const gone = stubFetch(() => Response.json({ error: { message: "no such object", code: 100, error_subcode: 33 } }, { status: 400 }));
+  try {
+    const error = await assertRejects(() => deleteComment("c9", "tok"), InstagramError);
+    assert(error.gone);
+  } finally {
+    gone.restore();
+  }
+});
+
+Deno.test('chooseAction: auto deletes only AI-scored harassment at 85%+, hide/delete apply to all', () => {
+  const ai = (reason: 'harassment' | 'hate_speech' | 'spam', confidence: number) => ({ remove: true, reason, confidence } as const);
+  assertEquals(chooseAction(ai('harassment', 0.85), 'auto'), 'delete');
+  assertEquals(chooseAction(ai('harassment', 0.98), 'auto'), 'delete');
+  assertEquals(chooseAction(ai('harassment', 0.84), 'auto'), 'hide');
+  assertEquals(chooseAction(ai('hate_speech', 0.99), 'auto'), 'hide');
+  assertEquals(chooseAction(ai('spam', 0.99), 'auto'), 'hide');
+  // A blocked user scores harassment at 100% by rule, not by the AI: hidden in auto mode.
+  assertEquals(chooseAction({ remove: true, reason: 'harassment', confidence: 1, byRule: true }, 'auto'), 'hide');
+  assertEquals(chooseAction(ai('harassment', 0.99), 'hide'), 'hide');
+  assertEquals(chooseAction(ai('spam', 0.6), 'delete'), 'delete');
 });

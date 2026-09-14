@@ -3,6 +3,7 @@ import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
+  Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -26,7 +27,7 @@ import { useAuth } from '../../src/context/AuthContext';
 import { useModeration } from '../../src/context/ModerationContext';
 import { getPlan, PAID_PLANS } from '../../src/data/plans';
 import { useTheme } from '../../src/theme/ThemeContext';
-import { CategoryKey, Plan, Sensitivity } from '../../src/types';
+import { CategoryKey, FlaggedAction, Plan, Sensitivity } from '../../src/types';
 
 const plansWith = (feature: 'keywordBlocklist' | 'blockedUsers') =>
   PAID_PLANS.filter((p: Plan) => p[feature])
@@ -37,9 +38,15 @@ const CATEGORIES: { key: CategoryKey; label: string; desc: string; icon: keyof t
   { key: 'hate_speech', label: 'Hate speech', desc: 'Attacks based on identity', icon: 'megaphone-outline' },
   { key: 'harassment', label: 'Harassment', desc: 'Targeted bullying & threats', icon: 'warning-outline' },
   { key: 'slurs', label: 'Slurs', desc: 'Explicit slurs & insults', icon: 'ban-outline' },
-  { key: 'spam', label: 'Spam', desc: 'Scams, links & bots', icon: 'mail-unread-outline' },
+  { key: 'spam', label: 'Spam', desc: 'Scams, links & bots (off by default)', icon: 'mail-unread-outline' },
   { key: 'self_harm', label: 'Self-harm promotion', desc: 'Encouraging self-harm', icon: 'medkit-outline' },
 ];
+
+const ACTION_HINT: Record<FlaggedAction, string> = {
+  hide: 'Every flagged comment is hidden. Hidden comments disappear for everyone except the commenter, and you can restore them from the Log.',
+  auto: 'Harassment the AI is at least 85% sure of is deleted for good. Everything else is hidden, so you can restore it from the Log.',
+  delete: 'Every flagged comment is deleted from Instagram for good. They stay in your Log but can’t be restored.',
+};
 
 const SENSITIVITY_HINT: Record<Sensitivity, string> = {
   low: 'Only removes clearly toxic comments. Fewest false positives.',
@@ -54,12 +61,30 @@ export default function Filters() {
   const {
     filters,
     setSensitivity,
+    setFlaggedAction,
     toggleCategory,
     addKeyword,
     removeKeyword,
     addBlockedUser,
     removeBlockedUser,
   } = useModeration();
+
+  // Deleting can't be undone, so switching to it asks first.
+  const chooseAction = (action: FlaggedAction) => {
+    if (action === filters.flaggedAction) return;
+    if (action !== 'delete') {
+      setFlaggedAction(action);
+      return;
+    }
+    Alert.alert(
+      'Delete every flagged comment?',
+      'toxoff will delete all flagged comments from Instagram for everyone, not just clear harassment. Deleted comments can’t be restored, even if the AI got one wrong.',
+      [
+        { text: 'Keep hiding', style: 'cancel' },
+        { text: 'Delete them', style: 'destructive', onPress: () => setFlaggedAction('delete') },
+      ]
+    );
+  };
 
   const [keyword, setKeyword] = useState('');
   const [blockedUser, setBlockedUser] = useState('');
@@ -97,6 +122,23 @@ export default function Filters() {
             />
             <Text style={{ color: colors.textMuted, fontSize: font.size.sm, marginTop: 10, lineHeight: 19 }}>
               {SENSITIVITY_HINT[filters.sensitivity]}
+            </Text>
+          </View>
+
+          {/* What happens to a flagged comment */}
+          <View style={{ marginTop: spacing.xl }}>
+            <SectionLabel>When a comment is flagged</SectionLabel>
+            <Segmented<FlaggedAction>
+              value={filters.flaggedAction}
+              onChange={chooseAction}
+              options={[
+                { label: 'Hide all', value: 'hide' },
+                { label: 'Auto', value: 'auto' },
+                { label: 'Delete all', value: 'delete' },
+              ]}
+            />
+            <Text style={{ color: colors.textMuted, fontSize: font.size.sm, marginTop: 10, lineHeight: 19 }}>
+              {ACTION_HINT[filters.flaggedAction]}
             </Text>
           </View>
 

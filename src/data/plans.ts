@@ -13,7 +13,8 @@ export const PLANS: Plan[] = [
     tagline: 'Try toxoff on one account',
     features: [
       '1 connected account (Instagram or TikTok)',
-      '100 free comment checks (shared with your trial)',
+      '20 free comment checks (shared with your trial)',
+      '5 more for each friend you invite (up to 3)',
       '100+ languages',
       'All toxicity categories',
     ],
@@ -65,4 +66,10 @@ export const TRIAL_DAYS = 7;
 
 // Comments an account can have checked without paying, across its trial and the Free
 // plan combined. Never resets. Must match consume_comment_check() (supabase/migrations).
-export const FREE_COMMENT_ALLOWANCE = 100;
+export const FREE_COMMENT_ALLOWANCE = 20;
+
+// Invites: a friend who joins with your code and connects an Instagram account nobody has
+// connected before earns you both INVITE_BONUS more free checks, for up to MAX_INVITE_REWARDS
+// friends. Must match grant_invite_reward() (supabase/migrations).
+export const INVITE_BONUS = 5;
+export const MAX_INVITE_REWARDS = 3;

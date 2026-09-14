@@ -14,12 +14,15 @@ export async function restoreComment(req: Request): Promise<Response> {
 
   const { data: row, error } = await db()
     .from('moderation_log')
-    .select('id, user_id, account_id, platform, comment_id, restored')
+    .select('id, user_id, account_id, platform, comment_id, restored, action')
     .eq('id', commentId)
     .maybeSingle();
   if (error) throw error;
   if (!row || row.user_id !== uid) throw new HttpError(404, 'Comment not found.');
   if (row.restored) return json({ ok: true });
+  if (row.action === 'deleted') {
+    throw new HttpError(409, "This comment was deleted, so it can't be restored.");
+  }
   if (row.platform !== 'instagram' || !row.comment_id || !row.account_id) {
     throw new HttpError(409, "This comment can't be restored from toxoff.");
   }

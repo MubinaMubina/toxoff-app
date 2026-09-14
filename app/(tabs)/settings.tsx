@@ -18,19 +18,18 @@ import {
 } from '../../src/components/ui';
 import { useAuth } from '../../src/context/AuthContext';
 import { useModeration } from '../../src/context/ModerationContext';
-import { useRegion } from '../../src/context/RegionContext';
-import { getPlan } from '../../src/data/plans';
-import { cancelSubscription, openBillingPortal, resumeSubscription } from '../../src/lib/billing';
+import { getPlan, INVITE_BONUS } from '../../src/data/plans';
+import { emailSupport, openLink, PRIVACY_URL, TERMS_URL } from '../../src/lib/links';
 import { registerForPushNotifications } from '../../src/lib/notifications';
+import { manageSubscription } from '../../src/lib/purchases';
 import { shortDate } from '../../src/lib/time';
 import { useTheme } from '../../src/theme/ThemeContext';
 
 export default function Settings() {
   const { colors, font, pref, setPref, spacing } = useTheme();
   const router = useRouter();
-  const { user, subscription, signOut, refreshSubscription, setDemoBilling } = useAuth();
+  const { user, subscription, signOut, refreshSubscription } = useAuth();
   const { accounts, notificationsEnabled, setNotificationsEnabled, savePushToken } = useModeration();
-  const { region, chooseRegion } = useRegion();
 
   const [savingPush, setSavingPush] = useState(false);
   const [billingBusy, setBillingBusy] = useState(false);
@@ -40,7 +39,7 @@ export default function Settings() {
 
   const planDetail =
     billing?.status === 'past_due'
-      ? 'Payment failed. Update your card below.'
+      ? 'Payment problem. Update your payment method in the App Store.'
       : subscription.status === 'trialing' && subscription.trialEndsAt
         ? `Trial ends ${shortDate(subscription.trialEndsAt)}, then ${billing?.status === 'scheduled' ? billingPlan : 'Free'}`
         : billing?.periodEnd
@@ -53,61 +52,18 @@ export default function Settings() {
             ? 'Upgrade for unlimited moderation'
             : 'Manage your plan & billing';
 
-  // Billing actions talk to Stripe through the backend; in demo mode they change local state only.
-  const runBilling = async (action: () => Promise<void>) => {
+  // Changing plan, the payment method, or cancelling all happen on Apple's own subscriptions page.
+  const manageBilling = async () => {
     setBillingBusy(true);
     try {
-      await action();
+      await manageSubscription();
+      await refreshSubscription();
     } catch (e: any) {
       Alert.alert('Something went wrong', e?.message ?? 'Please try again.');
     } finally {
       setBillingBusy(false);
     }
   };
-
-  const manageBilling = () =>
-    runBilling(async () => {
-      if ((await openBillingPortal()).status === 'demo') {
-        Alert.alert('Demo mode', 'Connect Stripe to update your card and see invoices.');
-        return;
-      }
-      await refreshSubscription();
-    });
-
-  const confirmCancel = () => {
-    if (!billing) return;
-    Alert.alert(
-      `Cancel ${billingPlan}?`,
-      billing.status === 'scheduled'
-        ? `You won’t be charged. Your free trial continues until it ends, then you’ll be on Free.`
-        : `You’ll keep ${billingPlan} until ${billing.periodEnd ? shortDate(billing.periodEnd) : 'the end of this period'}. After that you’ll be on Free.`,
-      [
-        { text: `Keep ${billingPlan}`, style: 'cancel' },
-        {
-          text: 'Cancel subscription',
-          style: 'destructive',
-          onPress: () =>
-            runBilling(async () => {
-              if ((await cancelSubscription()).status === 'demo') {
-                setDemoBilling(billing.status === 'scheduled' ? null : { ...billing, cancelAtPeriodEnd: true });
-                return;
-              }
-              await refreshSubscription();
-            }),
-        },
-      ]
-    );
-  };
-
-  const resume = () =>
-    runBilling(async () => {
-      if (!billing) return;
-      if ((await resumeSubscription(billing.plan, billing.interval)).status === 'demo') {
-        setDemoBilling({ ...billing, cancelAtPeriodEnd: false });
-        return;
-      }
-      await refreshSubscription();
-    });
 
   const togglePush = async (value: boolean) => {
     if (!value) {
@@ -211,33 +167,28 @@ export default function Settings() {
                   <Ionicons name="card-outline" size={20} color={colors.text} />
                 </RowIcon>
                 <Text style={{ color: colors.text, fontSize: font.size.md, flex: 1, fontWeight: font.weight.medium }}>
-                  Manage billing
+                  Manage subscription
                 </Text>
-                <Text style={{ color: colors.textMuted, fontSize: font.size.sm }}>Card, invoices</Text>
+                <Text style={{ color: colors.textMuted, fontSize: font.size.sm }}>
+                  {billing.cancelAtPeriodEnd ? `Keep ${billingPlan}` : 'Change or cancel'}
+                </Text>
                 <Chevron />
               </Pressable>
-              <RowSeparator />
-              {billing.cancelAtPeriodEnd ? (
-                <Pressable onPress={resume} disabled={billingBusy} style={ROW}>
-                  <RowIcon>
-                    <Ionicons name="refresh-outline" size={20} color={colors.primary} />
-                  </RowIcon>
-                  <Text style={{ color: colors.primary, fontSize: font.size.md, fontWeight: font.weight.medium }}>
-                    Keep {billingPlan}
-                  </Text>
-                </Pressable>
-              ) : (
-                <Pressable onPress={confirmCancel} disabled={billingBusy} style={ROW}>
-                  <RowIcon>
-                    <Ionicons name="close-circle-outline" size={20} color={colors.danger} />
-                  </RowIcon>
-                  <Text style={{ color: colors.danger, fontSize: font.size.md, fontWeight: font.weight.medium }}>
-                    Cancel subscription
-                  </Text>
-                </Pressable>
-              )}
             </Card>
           )}
+
+          <Card padded={false} style={{ marginTop: spacing.md }}>
+            <Pressable onPress={() => router.push('/invite')} style={ROW}>
+              <RowIcon>
+                <Ionicons name="gift-outline" size={20} color={colors.text} />
+              </RowIcon>
+              <Text style={{ color: colors.text, fontSize: font.size.md, flex: 1, fontWeight: font.weight.medium }}>
+                Invite friends
+              </Text>
+              <Text style={{ color: colors.textMuted, fontSize: font.size.sm }}>+{INVITE_BONUS} checks each</Text>
+              <Chevron />
+            </Pressable>
+          </Card>
         </View>
 
         {/* Connected accounts */}
@@ -299,20 +250,6 @@ export default function Settings() {
             </View>
 
             <RowSeparator />
-            <Pressable onPress={() => chooseRegion()} style={ROW}>
-              <RowIcon>
-                <Ionicons name="globe-outline" size={20} color={colors.text} />
-              </RowIcon>
-              <Text style={{ color: colors.text, fontSize: font.size.md, flex: 1, fontWeight: font.weight.medium }}>
-                Billing region
-              </Text>
-              <Text style={{ color: colors.textMuted, fontSize: font.size.sm }}>
-                {region.country} · {region.currency}
-              </Text>
-              <Chevron />
-            </Pressable>
-
-            <RowSeparator />
             <View style={{ paddingHorizontal: LIST_ROW.inset, paddingVertical: 14, gap: 12 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: LIST_ROW.gap }}>
                 <RowIcon>
@@ -339,11 +276,11 @@ export default function Settings() {
         <View style={{ marginTop: spacing.xl }}>
           <SectionLabel>About</SectionLabel>
           <Card padded={false}>
-            <LinkRow icon="document-text-outline" label="Privacy policy" />
+            <LinkRow icon="document-text-outline" label="Privacy policy" onPress={() => openLink(PRIVACY_URL)} />
             <RowSeparator />
-            <LinkRow icon="shield-checkmark-outline" label="Terms of service" />
+            <LinkRow icon="shield-checkmark-outline" label="Terms of service" onPress={() => openLink(TERMS_URL)} />
             <RowSeparator />
-            <LinkRow icon="help-circle-outline" label="Help & support" />
+            <LinkRow icon="help-circle-outline" label="Help & support" onPress={emailSupport} />
           </Card>
         </View>
 
@@ -372,10 +309,18 @@ const ROW = {
   paddingVertical: 14,
 } as const;
 
-function LinkRow({ icon, label }: { icon: keyof typeof Ionicons.glyphMap; label: string }) {
+function LinkRow({
+  icon,
+  label,
+  onPress,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  onPress: () => void;
+}) {
   const { colors, font } = useTheme();
   return (
-    <Pressable style={ROW}>
+    <Pressable style={ROW} onPress={onPress} accessibilityRole="link">
       <RowIcon>
         <Ionicons name={icon} size={20} color={colors.text} />
       </RowIcon>

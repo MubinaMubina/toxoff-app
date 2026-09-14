@@ -6,10 +6,10 @@ import { Pressable, ScrollView, Switch, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { PlatformIcon } from '../../src/components/PlatformIcon';
 import { RemovedCommentRow } from '../../src/components/RemovedCommentRow';
-import { Card, EmptyState, LIST_ROW, RowIcon, RowSeparator, SectionLabel } from '../../src/components/ui';
+import { Button, Card, EmptyState, LIST_ROW, RowIcon, RowSeparator, SectionLabel } from '../../src/components/ui';
 import { useAuth } from '../../src/context/AuthContext';
 import { useModeration } from '../../src/context/ModerationContext';
-import { FREE_COMMENT_ALLOWANCE, getPlan } from '../../src/data/plans';
+import { getPlan, INVITE_BONUS } from '../../src/data/plans';
 import { registerForPushNotifications } from '../../src/lib/notifications';
 import { fullTimestamp } from '../../src/lib/time';
 import { palette } from '../../src/theme/colors';
@@ -40,14 +40,17 @@ function MetricCard({ value, label, accent }: { value: number; label: string; ac
 function FreeChecksCard({
   title,
   used,
+  limit,
   onUpgrade,
+  onInvite,
 }: {
   title: string;
   used: number;
+  limit: number;
   onUpgrade: () => void;
+  onInvite: () => void;
 }) {
   const { colors, font, radius, spacing } = useTheme();
-  const limit = FREE_COMMENT_ALLOWANCE;
   const reached = used >= limit;
   return (
     <Pressable onPress={onUpgrade} style={{ marginTop: spacing.xl }}>
@@ -86,9 +89,19 @@ function FreeChecksCard({
           }}
         >
           {reached
-            ? `You've used all ${limit} free comment checks, so new comments aren't being checked. Subscribe to keep moderating.`
+            ? `You've used all ${limit} free comment checks, so new comments aren't being checked. Subscribe to keep moderating, or invite a friend for ${INVITE_BONUS} more.`
             : `${used} of ${limit} free comment checks used`}
         </Text>
+        {reached && (
+          <Button
+            label={`Invite a friend · +${INVITE_BONUS} checks`}
+            icon="gift-outline"
+            variant="secondary"
+            size="sm"
+            onPress={onInvite}
+            style={{ marginTop: 12 }}
+          />
+        )}
       </Card>
     </Pressable>
   );
@@ -106,11 +119,12 @@ export default function Dashboard() {
     notificationsEnabled,
     savePushToken,
     freeCommentsUsed,
+    freeCommentAllowance,
   } = useModeration();
   const plan = getPlan(subscription.plan);
   // Includes a plan chosen during the trial: from then on comments aren't counted.
   const paid = subscription.paying;
-  const outOfFreeChecks = !paid && freeCommentsUsed >= FREE_COMMENT_ALLOWANCE;
+  const outOfFreeChecks = !paid && freeCommentsUsed >= freeCommentAllowance;
 
   // Register for push alerts once if the user has them enabled.
   useEffect(() => {
@@ -163,7 +177,9 @@ export default function Dashboard() {
                 : 'Free plan'
             }
             used={freeCommentsUsed}
+            limit={freeCommentAllowance}
             onUpgrade={() => router.push('/paywall')}
+            onInvite={() => router.push('/invite')}
           />
         )}
 

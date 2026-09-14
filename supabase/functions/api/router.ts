@@ -3,6 +3,8 @@ import { restoreComment } from './comments.ts';
 import { finishConnect, instagramCallback, startConnect } from './connect.ts';
 import { refreshTokens } from './cron.ts';
 import { HttpError, json } from './http.ts';
+import { pollComments } from './poll.ts';
+import { receiveRevenueCatWebhook, syncAppStore } from './store.ts';
 import { receiveInstagramWebhook, verifyInstagramSubscription } from './webhooks.ts';
 
 // The app calls EXPO_PUBLIC_API_BASE_URL = https://<project>.supabase.co/functions/v1/api.
@@ -27,6 +29,8 @@ export async function handle(req: Request): Promise<Response> {
         return await receiveInstagramWebhook(req);
       case 'POST /cron/refresh-tokens':
         return await refreshTokens(req);
+      case 'POST /cron/poll-comments':
+        return await pollComments(req);
       case 'POST /billing/subscribe':
         return await subscribe(req);
       case 'POST /billing/sync':
@@ -39,6 +43,10 @@ export async function handle(req: Request): Promise<Response> {
         return billingReturn(url);
       case 'POST /webhooks/stripe':
         return await receiveStripeWebhook(req);
+      case 'POST /billing/app-store/sync':
+        return await syncAppStore(req);
+      case 'POST /webhooks/revenuecat':
+        return await receiveRevenueCatWebhook(req);
       default:
         return json({ error: 'Not found.' }, 404);
     }

@@ -15,6 +15,16 @@ const anonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
  */
 export const isSupabaseConfigured = Boolean(url && anonKey);
 
+// Supabase's API now and then answers 502/503/504 ("Gateway Timeout"). Reads are tried once more;
+// writes aren't, since the first attempt may have gone through. Same as the backend's db.ts.
+async function fetchWithRetry(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  const method = (init?.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase();
+  const res = await fetch(input, init);
+  if ((method !== 'GET' && method !== 'HEAD') || ![502, 503, 504].includes(res.status)) return res;
+  await new Promise((resolve) => setTimeout(resolve, 500));
+  return fetch(input, init);
+}
+
 // || (not ??) so blank values in .env also fall back instead of crashing createClient.
 export const supabase = createClient(
   url || 'https://placeholder.supabase.co',
@@ -28,5 +38,6 @@ export const supabase = createClient(
       // Google sign-in returns a one-time code that exchangeCodeForSession swaps for a session.
       flowType: 'pkce',
     },
+    global: { fetch: fetchWithRetry },
   }
 );

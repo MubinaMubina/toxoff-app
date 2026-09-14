@@ -5,11 +5,11 @@
 toxoff is a mobile app that connects to a creator's Instagram and/or TikTok accounts
 and uses AI to automatically detect and remove toxic, hateful, or harmful comments in
 any language. Creators sign up with email, Google, or Apple, get a 7-day Plus trial, then
-stay on a Free tier unless they subscribe (location-based pricing).
+stay on a Free tier unless they subscribe in the app (Apple in-app purchase).
 
 Built with **Expo (React Native) + TypeScript**, **Supabase** (auth + database),
-**Stripe** & **Safepay** (subscriptions), and **Expo Notifications** (push alerts).
-Targets **iOS (App Store)** and **Android (Play Store)** from one codebase.
+**RevenueCat** (App Store subscriptions), and **Expo Notifications** (push alerts).
+Launches on **iOS (App Store)**; the codebase can also build for Android later.
 
 ---
 
@@ -39,13 +39,14 @@ app/                       # expo-router screens (file-based routing)
   splash.tsx               # onboarding / splash
   (auth)/                  # login, signup, trial-started
   connect-accounts.tsx     # OAuth placeholder + account-limit gating
-  paywall.tsx              # region-aware subscription screen
+  paywall.tsx              # subscription screen (App Store prices, restore purchases)
+  invite.tsx               # invite friends: share a code, or enter a friend's
   (tabs)/                  # Home, Log, Filters, Settings (bottom tabs)
 src/
   theme/                   # colors + light/dark ThemeContext
-  context/                 # Auth, Moderation, Region providers
-  data/                    # plans, pricing (region table), mock data
-  lib/                     # supabase, api, billing, safepay, notifications, time
+  context/                 # Auth, Moderation providers
+  data/                    # plans, list prices, mock data
+  lib/                     # supabase, api, purchases (RevenueCat), invites, notifications, time
   components/              # Button, Card, Badge, LogRow, etc.
 supabase/config.toml       # Supabase CLI config (auth settings, redirect URLs)
 supabase/migrations/       # database schema: tables, RLS, triggers, plan limits, cron jobs
@@ -59,7 +60,7 @@ scripts/generate-assets.mjs# placeholder icon/splash generator
 ## Configuration
 
 All client env vars are prefixed `EXPO_PUBLIC_` (see `.env.example`). **Secret keys
-(Stripe/Safepay secret, OpenAI) never go in the app** — they live on your backend.
+(RevenueCat secret, OpenAI) never go in the app** — they live on your backend.
 
 ### Supabase (auth + data)
 The hosted project is **toxoff** (ref `sjfmcieunormozrybqmi`, Singapore) and this repo is
@@ -87,12 +88,37 @@ linked to it with the Supabase CLI. The database password is in the macOS Keycha
 - Upgrade the project to **Pro** before launch — free projects pause after a week idle.
 
 ### AI moderation
-Comments are checked by the backend, not the app. `supabase/functions/api/classifier.ts` calls
-OpenAI's moderation endpoint (free, needs an `OPENAI_API_KEY`) and adds a spam score from simple
-signals (links, "DM me", phone numbers), since OpenAI doesn't detect spam or language.
+Comments are checked by the backend, not the app. `supabase/functions/api/classifier.ts` asks a
+small GPT model (`OPENAI_MODEL`, default `gpt-5.4-nano`, about $0.05 per 1,000 comments, needs an
+`OPENAI_API_KEY`) to score each comment in any language, including Roman Urdu, Hindi and mixed
+scripts, and to name its language (saved as `moderation_log.language`). If the model fails, OpenAI's
+free moderation endpoint (English-centric) is the fallback. A spam score from simple signals (links,
+"DM me", phone numbers) is added either way.
+
+Cheap answers come first, so the model only sees the comments that need it (`classify()`):
+comments with nothing to read (emoji, @mentions, numbers) and obvious spam (two or more signals)
+are settled by rules with no API call at all. Plain English comments, where every word is a common
+one, go to the free moderation endpoint, and if it's confidently clean (every score under 10%) or
+confidently abusive (90% or more) that's the answer. Everything else goes to the model: other
+languages and scripts, any unknown word (names, slang, Roman Urdu), and the grey zone in between.
+`Classification.source` says which path answered.
 `moderation.ts` turns the scores into a decision with the user's sensitivity, categories, keyword
-blocklist and blocked users (keywords match whole words). To move to a paid classifier later
-(e.g. Claude Haiku, for Roman Urdu and context), replace `classify()`; the rest only sees scores.
+blocklist and blocked users (keywords match whole words). The spam category is **off by default**
+(`filters.categories`); users turn it on in Filters. To move to another model or provider
+(e.g. `gpt-5.4-mini` for sharper judgement, or Claude), change `OPENAI_MODEL` or replace
+`classify()`; the rest only sees scores.
+
+The classifier does one thing: it scores a comment's text, and the only action taken on the result
+is removing that one comment. `filters.flagged_action` (Filters screen) decides how: **auto** (the
+default) deletes harassment the AI scores at 85% or more and hides everything else; **hide** hides
+all; **delete** deletes all (`chooseAction()` in `moderation.ts`). Blocked users and keywords are
+rules, not AI scores, so auto hides those. The log records which happened (`moderation_log.action`),
+and Restore is refused for deleted ones. Nothing else is ever done:
+no replies, likes or anything outside comments. It's also **rate limited**:
+each paid model call takes a slot from `take_classifier_call()`, by default 60 a minute per user
+and 600 a minute for the whole app (comments settled by rules or the free endpoint don't take one). You can change these with the optional `CLASSIFIER_LIMIT_PER_USER` and
+`CLASSIFIER_LIMIT_TOTAL` secrets. Over the limit, a comment isn't skipped: its free check is given
+back and it's checked on Meta's next delivery or the next poll.
 
 ### Instagram / TikTok
 Instagram uses the Instagram API with Instagram Login (Business and Creator accounts). Connect
@@ -115,6 +141,7 @@ One Supabase Edge Function, `supabase/functions/api`, deployed at
 | `POST /comments/restore` | app | un-hides the comment on Instagram, marks the log row restored |
 | `GET`/`POST /webhooks/instagram` | Meta | webhook check / new comments: check, hide, log, push |
 | `POST /cron/refresh-tokens` | daily job | extends Instagram tokens before they expire |
+| `POST /cron/poll-comments` | 5-minute job | fetches new comments itself (see [Comment polling](#comment-polling)) |
 | `POST /billing/…`, `POST /webhooks/stripe` | app, Stripe | subscriptions (see [Stripe](#stripe) below) |
 
 For each comment, `pipeline.ts` skips paused, disconnected and over-the-limit accounts (the oldest
@@ -126,6 +153,7 @@ the check is given back and the webhook returns an error, so Meta delivers the c
 **Secrets** (`npx supabase secrets set`, never in the app):
 - `CONNECT_SECRET`, `CRON_SECRET`, `INSTAGRAM_WEBHOOK_VERIFY_TOKEN` are set. The verify token is
   also in the Keychain (`supabase-toxoff-ig-verify-token`) for Meta's dashboard.
+- `INSTAGRAM_POLLING=on` turns on [comment polling](#comment-polling).
 - To add: `INSTAGRAM_APP_ID`, `INSTAGRAM_APP_SECRET`, `OPENAI_API_KEY`, `STRIPE_SECRET_KEY`,
   `STRIPE_WEBHOOK_SECRET`. Until they exist, those routes answer 503 "missing … setting".
 - Optional: `META_APP_SECRET`, if webhook deliveries fail with "Invalid signature".
@@ -138,6 +166,24 @@ routes check the user's session themselves.
 - `refresh-instagram-tokens` runs daily at 04:00 UTC. It reads the function URL and `CRON_SECRET`
   from Vault (`api_url`, `cron_secret`).
 - `prune-comment-claims` clears old claim records daily.
+- `poll-instagram-comments` runs every 5 minutes (same Vault secrets).
+
+### Comment polling
+Meta only sends `comments` webhooks to apps that are **Live** and have **Advanced Access** (App
+Review plus Business Verification). Until then, `poll.ts` fetches new comments itself, every 5
+minutes, while `INSTAGRAM_POLLING=on`:
+- For each connected account it reads the newest 5 posts and their comments and replies, newer
+  than the account's `comments_polled_at` cursor (with 10 minutes of overlap, and never more than
+  2 days back).
+- Each comment goes through the same pipeline as a webhook, so the same rules apply: one free
+  check, claims, hide, log, push, plan limits.
+- Comments already hidden, and the account's own comments, are skipped.
+- The cursor only moves when every comment was handled, so a temporary failure is read again
+  next time.
+- Because it never looks back further than the 7 days claims are kept, a restored comment isn't
+  hidden again.
+- It doesn't cover comments on older posts. Webhooks do, so switch polling off (or keep it as a
+  safety net) once Meta approves the app.
 
 **Tests:** `npm run test:functions` (needs Deno), or with Docker:
 `docker run --rm -v "$PWD":/app -w /app denoland/deno deno test --allow-env --config supabase/functions/api/deno.json supabase/functions/tests`.
@@ -150,50 +196,118 @@ routes check the user's session themselves.
 4. Webhooks: set the callback URL to
    `https://sjfmcieunormozrybqmi.supabase.co/functions/v1/api/webhooks/instagram`, use the
    verify token from the Keychain, and subscribe to `comments`.
-5. Add your own Instagram professional account as a tester to try it. Other creators can only
+5. App roles → Roles → Instagram testers: add your own Instagram professional account, then
+   accept the invite on instagram.com (Settings → Apps and websites → Tester invites). It can
+   connect straight away. Its comments are picked up by [comment polling](#comment-polling).
+6. Webhook deliveries of comments need the app to be **Live** (which needs a privacy-policy URL) and
+   **Advanced Access** for `instagram_business_manage_comments`, which needs App Review and
+   Business Verification. The Instagram account must also be public. Other creators can only
    connect after App Review approves `instagram_business_basic` and
    `instagram_business_manage_comments`.
 
 ---
 
-## Billing (location-based)
+## Billing (App Store)
 
-Pricing and payment rails are chosen by the user's **region** (auto-detected via
-`expo-localization`, overridable in Settings). Tiers and prices live in
-[`src/data/plans.ts`](src/data/plans.ts) and [`src/data/pricing.ts`](src/data/pricing.ts).
+toxoff launches on the **App Store only**, so subscriptions are sold with **Apple's in-app
+purchase** (App Review rule 3.1.1), through **RevenueCat**. Tiers live in
+[`src/data/plans.ts`](src/data/plans.ts). Prices are set per country in App Store Connect, and the
+paywall shows Apple's price in the user's own currency. [`src/data/pricing.ts`](src/data/pricing.ts)
+only holds the USD list prices shown in Expo Go and demo mode.
 
-| Tier | Accounts | Limits | Pakistan (PKR, Safepay) | Rest of world (USD, Stripe) |
-|------|----------|--------|-------------------------|------------------------------|
-| **Free** | 1 (IG *or* TikTok) | shares the 100 free comment checks; no keyword blocklist or blocked users | free | free |
-| **Solo** | 1 (IG *or* TikTok) | unlimited; keyword blocklist | Rs 1,100/mo | $4/mo |
-| **Plus** | up to 5 (IG + TikTok) | unlimited; keyword blocklist + blocked users | Rs 2,500/mo | $9/mo |
+| Tier | Accounts | Limits | List price |
+|------|----------|--------|------------|
+| **Free** | 1 (IG *or* TikTok) | shares the 20 free comment checks (+5 per invited friend, up to 3); no keyword blocklist or blocked users | free |
+| **Solo** | 1 (IG *or* TikTok) | unlimited; keyword blocklist | $5/mo, $50/yr |
+| **Plus** | up to 5 (IG + TikTok) | unlimited; keyword blocklist + blocked users | $9/mo, $90/yr |
 
-Every new account starts with a **7-day Plus trial** (no card) and moves to **Free** when it
-ends unless they subscribe. The trial and Free together get **100 free comment checks per
-account — ever, not per month**; once they're used, comments stop being checked until the
-user subscribes. Paid plans bill **monthly or annually** (annual = 2 months free).
-**Launch market: Pakistan.**
+Every new account starts with a **7-day Plus trial** (no card; the app runs it, not Apple) and moves
+to **Free** when it ends unless they subscribe. Subscribing during the trial starts the paid plan
+straight away. The trial and Free together get **20 free comment checks per account, ever, not
+per month**. Once they're used, comments stop being checked until the user subscribes or invites
+a friend. **Launch market: Pakistan.** Apple Pay isn't available there, but App Store purchases
+don't need it: Apple charges the card (or balance) on the user's Apple ID.
+
+**Invites** (`app/invite.tsx`, migration `20260914020000_invites.sql`):
+- Everyone has a single-use invite code: Settings → Invite friends, or the dashboard when the
+  free checks run out.
+- A new account (under 7 days old) can enter one friend's code. When that friend connects an
+  Instagram account that no toxoff user has connected before, both get **5 more free checks**
+  (`bonus_comment_checks`).
+- Each person can earn this for up to **3 friends** (15 extra). A friend who joins after that
+  still gets their 5.
+- Anti-abuse:
+  - `platform_accounts_seen` keeps a hash of every account ever connected, so re-linking one
+    from a second email earns nothing.
+  - Two people can't swap codes.
+  - All writes go through `invite_status()` / `redeem_invite_code()` and an `accounts` trigger;
+    the app can't write the tables.
 
 Limits live in `src/data/plans.ts` (app) and `supabase/migrations` (server) — keep them in
 sync. The database enforces them itself: `enforce_account_limit` blocks extra accounts, and
 the moderation backend takes each comment on with `claim_comment()`, which atomically spends
-one free check unless `is_paying()`: a paid plan, or a plan chosen during the trial. Paid-only
-rules use `effective_plan()`. When a plan lapses, the oldest accounts within the new limit
-keep being moderated.
+one free check unless `is_paying()`. Paid-only rules use `effective_plan()`. When a plan lapses,
+the oldest accounts within the new limit keep being moderated.
 
-### Payment providers
-- **Pakistan → Safepay** (`src/lib/safepay.ts`): cards + **JazzCash** + **Easypaisa**.
-  Stripe can't process PKR/local wallets, which is why PK routes here. Needs a backend
-  route `POST /billing/safepay/session` that uses the Safepay **secret** key to create a
-  checkout session and returns `{ checkoutUrl }`.
-- **Rest of world → Stripe** (`src/lib/billing.ts`): Stripe's payment sheet
-  (`@stripe/stripe-react-native`), backed by the routes below. Built and tested; waiting on a
-  Stripe account.
+### App Store subscriptions (RevenueCat)
 
-`src/lib/billing.ts#startSubscription` routes to the right provider by
-`region.provider`. To add a market, add an entry to `REGIONS` in `pricing.ts`.
+RevenueCat checks Apple's receipts and is the source of truth. The app signs RevenueCat in with the
+toxoff user id (`src/lib/purchases.ts`), so every purchase belongs to that user. The backend
+(`supabase/functions/api/store.ts`) re-reads the user from RevenueCat's REST API and copies their
+subscription onto the profile (`billing_*` columns, `billing_store = 'app_store'`, via
+`apply_store_billing()`). It does this on every webhook, and right after a purchase or restore. The
+app only reads it, live.
 
-### Stripe
+| Route | Does |
+|-------|------|
+| `POST /billing/app-store/sync` | the app, after a purchase or restore: re-read and copy |
+| `POST /webhooks/revenuecat` | any RevenueCat event: re-read every toxoff user it names (including both sides of a transfer) |
+
+How it behaves:
+- **Buying** during the trial or on Free starts the plan now.
+- **Switching** between Solo and Plus, or monthly and annual, is another purchase in the same
+  subscription group. Apple upgrades right away and downgrades at the next renewal.
+- **Cancelling, changing the card and refunds** happen in Apple's own settings. The app's
+  "Manage subscription" opens them.
+- **Cancelled** (`unsubscribe_detected_at`): the plan stays on until the period ends.
+- **Billing problem**: during Apple's grace period the plan stays on as `past_due`, and Settings
+  says to update the payment method.
+- **Refunded or expired**: back to the rest of the trial, if any, else Free.
+- **Restore purchases** is on the paywall (required by the App Store).
+- In **Expo Go**, or without a RevenueCat key, purchases run in demo mode (a local pretend plan).
+
+**To set up** (with an Apple Developer account):
+1. App Store Connect:
+   - Create the app (`com.toxoff.app`) and sign the Paid Apps agreement (Business).
+   - Add a subscription group `toxoff` with four auto-renewable subscriptions:
+     `toxoff_solo_monthly`, `toxoff_solo_annual`, `toxoff_plus_monthly` and `toxoff_plus_annual`.
+   - Rank Plus above Solo in the group.
+   - Set prices, including PKR for Pakistan.
+2. App Store Connect → Users and Access → Integrations → In-App Purchase: create a key, for
+   RevenueCat.
+3. RevenueCat:
+   - Create a project and add the App Store app, with the bundle id and that key.
+   - Import the four products, and put them in the **current offering** as four packages (for
+     example `solo_monthly`). The app finds packages by product id.
+4. RevenueCat → Integrations → Webhooks:
+   - URL: `https://sjfmcieunormozrybqmi.supabase.co/functions/v1/api/webhooks/revenuecat`
+   - Authorization header: the value in the Keychain `supabase-toxoff-revenuecat-webhook-auth`
+     (already set on the server as `REVENUECAT_WEBHOOK_AUTH`).
+   - Send both sandbox and production events.
+5. Keys:
+   - RevenueCat's **Apple public key** (`appl_…`) goes in `.env` as `EXPO_PUBLIC_REVENUECAT_IOS_KEY`.
+   - Its **secret key** goes on the server:
+     `npx supabase secrets set REVENUECAT_SECRET_KEY=sk_…` (keep a copy in the Keychain as
+     `supabase-toxoff-revenuecat-secret`).
+6. Test with a development build (`eas build --profile development --platform ios`) and a
+   sandbox tester from App Store Connect. Expo Go can't make real purchases.
+
+### Stripe (not used by the iOS app)
+
+The iOS app doesn't use Stripe or Safepay: App Store rules require Apple's in-app purchase, so their
+app code was removed. The Stripe backend below is kept, tested and deployed, but switched off. It's
+there in case toxoff also sells on the web or Android later.
+
 
 Stripe is the source of truth. The backend (`supabase/functions/api/billing.ts`) copies the
 user's current subscription onto their profile (`billing_*` columns, via `apply_billing()`)
@@ -254,9 +368,6 @@ For the store build (can't be tried in Expo Go):
   than left waiting). Stripe's `pending_if_incomplete` plus a confirmation step in the app would
   fix that.
 
-**Before App Store / Play submission:** Apple (rule 3.1.1) and Google Play require their own
-in-app purchase for digital subscriptions. Account deletion must also cancel the Stripe
-subscription.
 
 ---
 

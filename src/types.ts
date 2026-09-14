@@ -21,6 +21,7 @@ export type RemovedComment = {
   postRef: string;
   createdAt: string; // ISO timestamp
   restored?: boolean;
+  action?: 'hidden' | 'deleted'; // missing = hidden; deleted ones can't be restored
 };
 
 export type ConnectedAccount = {
@@ -38,11 +39,16 @@ export type CategoryKey =
   | 'spam'
   | 'self_harm';
 
+// What happens to a flagged comment: 'hide' everything (can be restored), 'auto' (the default:
+// harassment the AI is at least 85% sure of is deleted, the rest hidden), or 'delete' everything.
+export type FlaggedAction = 'hide' | 'auto' | 'delete';
+
 export type FilterSettings = {
   sensitivity: Sensitivity;
   categories: Record<CategoryKey, boolean>;
   keywords: string[];
   blockedUsers: string[];
+  flaggedAction: FlaggedAction;
 };
 
 export type PlanId = 'free' | 'solo' | 'plus';
@@ -59,29 +65,4 @@ export type Plan = {
   features: string[];
 };
 
-// ---- Location-based pricing ----
-
-export type PaymentProvider = 'stripe' | 'safepay';
-
-export type PaymentMethod =
-  | 'card'
-  | 'apple_pay'
-  | 'google_pay'
-  | 'jazzcash'
-  | 'easypaisa'
-  | 'bank';
-
 export type BillingInterval = 'monthly' | 'annual';
-
-// per-month figures; annual is the effective monthly price when billed yearly
-export type PlanPrice = { monthly: number; annual: number };
-
-export type Region = {
-  code: string; // ISO country code, e.g. "PK", "US"
-  country: string;
-  currency: string; // ISO currency, e.g. "PKR", "USD"
-  symbol: string; // "Rs", "$"
-  provider: PaymentProvider;
-  methods: PaymentMethod[];
-  prices: Record<PaidPlanId, PlanPrice>;
-};

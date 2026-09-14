@@ -4,10 +4,22 @@ import { HttpError } from './http.ts';
 
 let client: SupabaseClient | undefined;
 
+// Supabase's API now and then answers a request with 502/503/504 (seen: "Gateway Timeout" on the
+// first query after the function starts). Reads are tried again; writes aren't, since the first
+// attempt may have gone through (claiming a comment twice would skip it).
+export async function fetchWithRetry(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  const method = (init?.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase();
+  const res = await fetch(input, init);
+  if ((method !== 'GET' && method !== 'HEAD') || ![502, 503, 504].includes(res.status)) return res;
+  await new Promise((resolve) => setTimeout(resolve, 500));
+  return fetch(input, init);
+}
+
 // Service-role client: it bypasses RLS, so every query must scope rows to the right user itself.
 export function db(): SupabaseClient {
   client ??= createClient(env.supabaseUrl(), env.serviceRoleKey(), {
     auth: { persistSession: false, autoRefreshToken: false },
+    global: { fetch: fetchWithRetry },
   });
   return client;
 }

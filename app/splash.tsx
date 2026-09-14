@@ -72,7 +72,7 @@ export default function Splash() {
               marginTop: 4,
             }}
           >
-            7-day Plus trial · 100 free comment checks · No card
+            7-day Plus trial · 20 free comment checks · No card
           </Text>
         </View>
       </View>

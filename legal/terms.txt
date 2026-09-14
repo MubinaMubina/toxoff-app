@@ -1,0 +1,87 @@
+TOXOFF TERMS OF SERVICE
+
+Effective: 14 September 2026
+
+These terms apply when you use the toxoff app. By creating an account you agree to them.
+Contact: support@toxoff.app
+
+
+1. WHAT TOXOFF DOES
+
+toxoff connects to Instagram professional accounts you own or manage and removes comments on
+your posts that match your filters, using automated checks. By default, flagged comments are
+hidden, so you can review and restore them in the app. If you choose Delete in Filters, flagged
+comments are deleted from Instagram permanently and cannot be restored.
+
+
+2. AUTOMATED CHECKS CAN BE WRONG
+
+toxoff uses automated tools, including AI, to decide which comments to remove. They can miss
+harmful comments and can remove comments that were fine. Review your removed comments and
+restore hidden ones that should stay. If you choose Delete, mistakes cannot be undone. toxoff
+does not guarantee that every harmful comment will be caught.
+
+
+3. YOUR ACCOUNT
+
+- Give accurate information and keep your sign-in secure.
+- Only connect Instagram accounts you own or are allowed to manage.
+- You are responsible for your use of Instagram and for following Instagram's terms.
+
+
+4. PLANS, FREE CHECKS AND INVITES
+
+- New accounts get a free trial, then the Free plan, which includes a limited number of free
+  comment checks in total.
+- Inviting friends can earn extra free checks, as described in the app. Invite rewards are for
+  real friends: we may remove rewards or suspend accounts that abuse them (for example, by using
+  fake accounts).
+- We may change the free allowance or plan features in the future; changes will not reduce a
+  subscription period you have already paid for.
+
+
+5. SUBSCRIPTIONS
+
+- Solo and Plus are auto-renewing subscriptions sold through Apple's App Store and charged to
+  your Apple ID.
+- A subscription renews automatically at the end of each period unless you cancel at least 24
+  hours before it ends. Manage or cancel it in your App Store account settings.
+- Subscribing during the free trial starts the paid plan immediately.
+- Refunds are handled by Apple under Apple's policies.
+
+
+6. ACCEPTABLE USE
+
+Do not use toxoff to break the law, to access accounts or data you are not allowed to, to
+interfere with the service, or to reverse engineer or overload it.
+
+
+7. ENDING YOUR USE
+
+You can stop using toxoff and delete your account at any time (see
+https://sjfmcieunormozrybqmi.supabase.co/storage/v1/object/public/legal/delete-data.txt).
+We may suspend or end accounts that break these terms.
+
+
+8. DISCLAIMERS AND LIABILITY
+
+toxoff is provided "as is" and may sometimes be unavailable, for example when Instagram or our
+providers have problems. To the fullest extent allowed by law, we are not liable for indirect
+or consequential losses, or for comments that were or were not hidden or deleted. Nothing in
+these terms limits rights you have under the law that cannot be limited.
+
+
+9. APPLE
+
+These terms are between you and toxoff, not Apple. Apple's standard Licensed Application End
+User License Agreement also applies to your use of the app.
+
+
+10. CHANGES
+
+We may update these terms. We will post the new version at this address with a new effective
+date, and tell you in the app if the changes are significant.
+
+
+Privacy policy: https://sjfmcieunormozrybqmi.supabase.co/storage/v1/object/public/legal/privacy.txt
+Questions: support@toxoff.app

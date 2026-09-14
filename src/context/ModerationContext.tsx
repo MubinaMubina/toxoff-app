@@ -16,6 +16,7 @@ import {
   MOCK_FREE_COMMENTS_USED,
   MOCK_REMOVED,
 } from '../data/mockData';
+import { FREE_COMMENT_ALLOWANCE } from '../data/plans';
 import { apiPost } from '../lib/api';
 import { isSupabaseConfigured, supabase } from '../lib/supabase';
 import { DAY_MS } from '../lib/time';
@@ -23,6 +24,7 @@ import {
   CategoryKey,
   ConnectedAccount,
   FilterSettings,
+  FlaggedAction,
   ModerationReason,
   Platform,
   RemovedComment,
@@ -38,12 +40,14 @@ type ModerationValue = {
   filters: FilterSettings;
   notificationsEnabled: boolean;
   metrics: Metrics;
-  freeCommentsUsed: number; // of FREE_COMMENT_ALLOWANCE, shared by the trial and Free
+  freeCommentsUsed: number; // of freeCommentAllowance, shared by the trial and Free
+  freeCommentAllowance: number; // FREE_COMMENT_ALLOWANCE plus checks earned by inviting friends
   connectAccount: (platform: Platform) => Promise<void>;
   disconnectAccount: (id: string) => Promise<void>;
   togglePause: (id: string) => void;
   restoreComment: (id: string) => Promise<void>;
   setSensitivity: (s: Sensitivity) => void;
+  setFlaggedAction: (a: FlaggedAction) => void;
   toggleCategory: (c: CategoryKey) => void;
   addKeyword: (w: string) => void;
   removeKeyword: (w: string) => void;
@@ -71,6 +75,7 @@ type LogRow = {
   language: string | null;
   post_ref: string | null;
   restored: boolean | null;
+  action: 'hidden' | 'deleted' | null;
   created_at: string;
 };
 
@@ -79,13 +84,14 @@ type FiltersRow = {
   categories: Partial<Record<CategoryKey, boolean>> | null;
   keywords: string[] | null;
   blocked_users: string[] | null;
+  flagged_action: FlaggedAction | null;
 };
 
 const ModerationContext = createContext<ModerationValue | undefined>(undefined);
 
 const ACCOUNT_COLUMNS = 'id, platform, handle, connected, paused';
 const LOG_COLUMNS =
-  'id, platform, username, text, reason, confidence, language, post_ref, restored, created_at';
+  'id, platform, username, text, reason, confidence, language, post_ref, restored, action, created_at';
 const LOG_LIMIT = 200;
 
 const ZERO_METRICS: Metrics = { today: 0, week: 0, month: 0 };
@@ -94,6 +100,7 @@ const EMPTY_FILTERS: FilterSettings = {
   categories: DEFAULT_FILTERS.categories,
   keywords: [],
   blockedUsers: [],
+  flaggedAction: 'auto',
 };
 
 const toAccount = (r: AccountRow): ConnectedAccount => ({
@@ -115,6 +122,7 @@ const toComment = (r: LogRow): RemovedComment => ({
   postRef: r.post_ref ?? '—',
   createdAt: r.created_at,
   restored: r.restored ?? false,
+  action: r.action ?? 'hidden',
 });
 
 const toFilters = (r: FiltersRow): FilterSettings => ({
@@ -122,6 +130,7 @@ const toFilters = (r: FiltersRow): FilterSettings => ({
   categories: { ...EMPTY_FILTERS.categories, ...r.categories },
   keywords: r.keywords ?? [],
   blockedUsers: r.blocked_users ?? [],
+  flaggedAction: r.flagged_action === 'delete' || r.flagged_action === 'hide' ? r.flagged_action : 'auto',
 });
 
 // Counted server-side so metrics stay right beyond the rows loaded into the log.
@@ -156,6 +165,7 @@ export function ModerationProvider({ children }: { children: React.ReactNode }) 
   const [freeCommentsUsed, setFreeCommentsUsed] = useState(
     isSupabaseConfigured ? 0 : MOCK_FREE_COMMENTS_USED
   );
+  const [bonusChecks, setBonusChecks] = useState(0);
   const filtersDirty = useRef(false);
 
   const refreshMetrics = useCallback(() => {
@@ -184,6 +194,7 @@ export function ModerationProvider({ children }: { children: React.ReactNode }) 
       setFilters(EMPTY_FILTERS);
       setLiveMetrics(ZERO_METRICS);
       setFreeCommentsUsed(0);
+      setBonusChecks(0);
       return;
     }
 
@@ -193,7 +204,7 @@ export function ModerationProvider({ children }: { children: React.ReactNode }) 
         supabase.from('accounts').select(ACCOUNT_COLUMNS).eq('user_id', userId).order('created_at'),
         supabase
           .from('filters')
-          .select('sensitivity, categories, keywords, blocked_users')
+          .select('sensitivity, categories, keywords, blocked_users, flagged_action')
           .eq('user_id', userId)
           .maybeSingle(),
         supabase
@@ -204,7 +215,7 @@ export function ModerationProvider({ children }: { children: React.ReactNode }) 
           .limit(LOG_LIMIT),
         supabase
           .from('profiles')
-          .select('notifications_enabled, free_comments_used')
+          .select('notifications_enabled, free_comments_used, bonus_comment_checks')
           .eq('id', userId)
           .maybeSingle(),
       ]);
@@ -217,11 +228,13 @@ export function ModerationProvider({ children }: { children: React.ReactNode }) 
       if (prof.data) {
         setNotificationsEnabledState(prof.data.notifications_enabled);
         setFreeCommentsUsed(prof.data.free_comments_used);
+        setBonusChecks(prof.data.bonus_comment_checks ?? 0);
       }
     })().catch((e) => console.warn('Could not load moderation data', e));
     refreshMetrics();
 
-    // The backend's writes show up without a refresh: removed comments and the free-checks meter.
+    // The backend's writes show up without a refresh: removed comments, the free-checks meter and
+    // checks earned by invites.
     const channel = supabase
       .channel(`moderation:${userId}`)
       .on(
@@ -236,8 +249,9 @@ export function ModerationProvider({ children }: { children: React.ReactNode }) 
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${userId}` },
         (payload) => {
-          const row = payload.new as { free_comments_used?: number };
+          const row = payload.new as { free_comments_used?: number; bonus_comment_checks?: number };
           if (typeof row.free_comments_used === 'number') setFreeCommentsUsed(row.free_comments_used);
+          if (typeof row.bonus_comment_checks === 'number') setBonusChecks(row.bonus_comment_checks);
         }
       )
       .subscribe();
@@ -260,6 +274,7 @@ export function ModerationProvider({ children }: { children: React.ReactNode }) 
           categories: filters.categories,
           keywords: filters.keywords,
           blocked_users: filters.blockedUsers,
+          flagged_action: filters.flaggedAction,
         })
         .eq('user_id', userId)
         .then(({ error }) => {
@@ -371,6 +386,11 @@ export function ModerationProvider({ children }: { children: React.ReactNode }) 
     [editFilters]
   );
 
+  const setFlaggedAction = useCallback(
+    (a: FlaggedAction) => editFilters((f) => ({ ...f, flaggedAction: a })),
+    [editFilters]
+  );
+
   const toggleCategory = useCallback(
     (c: CategoryKey) =>
       editFilters((f) => ({
@@ -457,11 +477,13 @@ export function ModerationProvider({ children }: { children: React.ReactNode }) 
       notificationsEnabled,
       metrics,
       freeCommentsUsed,
+      freeCommentAllowance: FREE_COMMENT_ALLOWANCE + bonusChecks,
       connectAccount,
       disconnectAccount,
       togglePause,
       restoreComment,
       setSensitivity,
+      setFlaggedAction,
       toggleCategory,
       addKeyword,
       removeKeyword,
@@ -477,11 +499,13 @@ export function ModerationProvider({ children }: { children: React.ReactNode }) 
       notificationsEnabled,
       metrics,
       freeCommentsUsed,
+      bonusChecks,
       connectAccount,
       disconnectAccount,
       togglePause,
       restoreComment,
       setSensitivity,
+      setFlaggedAction,
       toggleCategory,
       addKeyword,
       removeKeyword,

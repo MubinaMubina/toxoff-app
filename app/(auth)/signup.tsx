@@ -67,7 +67,7 @@ export default function SignUp() {
           </View>
           <H1 style={{ marginTop: 18 }}>Create your account</H1>
           <Muted style={{ marginTop: 6 }}>
-            Try Plus free for 7 days with 100 free comment checks. No card needed.
+            Try Plus free for 7 days with 20 free comment checks. No card needed.
           </Muted>
 
           <View style={{ gap: 14, marginTop: 28 }}>

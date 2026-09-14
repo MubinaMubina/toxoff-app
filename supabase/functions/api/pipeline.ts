@@ -1,12 +1,13 @@
 import { classify } from './classifier.ts';
 import { db, markNeedsReconnect } from './db.ts';
 import { env } from './env.ts';
-import { type CommentEvent, getMedia, InstagramError, setCommentHidden } from './instagram.ts';
-import { decide, type FilterSettings, type ModerationReason } from './moderation.ts';
+import { type CommentEvent, deleteComment, getMedia, InstagramError, setCommentHidden } from './instagram.ts';
+import { chooseAction, decide, type FilterSettings, type FlaggedAction, type ModerationReason } from './moderation.ts';
 import { sendPush } from './push.ts';
 
 export type Outcome =
   | 'hidden'
+  | 'deleted' // the user chose Delete for flagged comments (Filters)
   | 'kept'
   | 'duplicate' // this comment was already handled (webhooks can arrive twice)
   | 'no_checks_left' // trial/Free user used up their free comment checks
@@ -39,10 +40,15 @@ const REASON_LABEL: Record<ModerationReason, string> = {
 
 const MEDIA_LABEL: Record<string, string> = { FEED: 'Post', REELS: 'Reel', STORY: 'Story', AD: 'Ad' };
 
+/** Too many comment checks this minute; a temporary failure like any other. */
+export class RateLimitedError extends Error {}
+
 /**
- * Checks one new Instagram comment and hides it if the user's filters say so.
- * Throws on temporary failures (classifier or Instagram down): the free check is given back and
- * the webhook answers with an error, so Meta delivers the comment again later.
+ * Checks one new Instagram comment and hides it (or deletes it, if the user chose that) when the
+ * user's filters say so.
+ * Throws on temporary failures (classifier or Instagram down, rate limit reached): the free check
+ * is given back and the webhook answers with an error, so Meta delivers the comment again later
+ * (polling reads it again next time).
  */
 export async function moderateInstagramComment(event: CommentEvent): Promise<Outcome> {
   const { data, error } = await db().rpc('moderation_target', {
@@ -84,7 +90,19 @@ export async function moderateInstagramComment(event: CommentEvent): Promise<Out
   };
 
   try {
-    const scores = await classify(event.text, env.openaiApiKey());
+    // Rate limit, on paid model calls only (the pre-filter's rules and free endpoint don't count).
+    // Over it, the comment is given back and checked on the next delivery or poll.
+    const beforeModel = async () => {
+      const { data: allowed, error: limitError } = await db().rpc('take_classifier_call', {
+        uid: target.user_id,
+        per_user: env.classifierLimitPerUser(),
+        total: env.classifierLimitTotal(),
+      });
+      if (limitError) throw limitError;
+      if (!allowed) throw new RateLimitedError(`Comment check limit reached for user ${target.user_id}`);
+    };
+
+    const { scores, language } = await classify(event.text, env.openaiApiKey(), env.openaiModel(), { beforeModel });
     // The keyword blocklist and blocked users are paid features; saved lists wait for an upgrade.
     const decision = decide(event.text, event.authorUsername, scores, {
       ...filters,
@@ -93,8 +111,11 @@ export async function moderateInstagramComment(event: CommentEvent): Promise<Out
     });
     if (!decision.remove || !decision.reason) return 'kept';
 
+    // Hidden comments can be restored from the app; deleted ones are gone for good.
+    const deleting = chooseAction(decision, filters.action) === 'delete';
     try {
-      await setCommentHidden(event.commentId, true, token.access_token);
+      if (deleting) await deleteComment(event.commentId, token.access_token);
+      else await setCommentHidden(event.commentId, true, token.access_token);
     } catch (e) {
       if (e instanceof InstagramError && e.gone) return 'comment_gone';
       if (e instanceof InstagramError && e.tokenInvalid) {
@@ -117,7 +138,9 @@ export async function moderateInstagramComment(event: CommentEvent): Promise<Out
           text: event.text,
           reason: decision.reason,
           confidence: decision.confidence,
+          language,
           post_ref: await describePost(event, token.access_token),
+          action: deleting ? 'deleted' : 'hidden',
         },
         { onConflict: 'platform,comment_id', ignoreDuplicates: true }
       )
@@ -127,7 +150,7 @@ export async function moderateInstagramComment(event: CommentEvent): Promise<Out
 
     if (logged && profile?.notifications_enabled && profile.push_token) {
       const result = await sendPush(profile.push_token, {
-        title: `Hid a comment on ${target.handle}`,
+        title: `${deleting ? 'Deleted' : 'Hid'} a comment on ${target.handle}`,
         body: `From @${event.authorUsername}, flagged for ${REASON_LABEL[decision.reason]}. Tap to review.`,
         data: { commentId: logged.id },
       });
@@ -135,7 +158,7 @@ export async function moderateInstagramComment(event: CommentEvent): Promise<Out
         await db().from('profiles').update({ push_token: null }).eq('id', target.user_id);
       }
     }
-    return 'hidden';
+    return deleting ? 'deleted' : 'hidden';
   } catch (e) {
     await release();
     throw e;
@@ -152,10 +175,10 @@ async function loadToken(accountId: string) {
   return data as { access_token: string; expires_at: string | null } | null;
 }
 
-async function loadFilters(userId: string): Promise<FilterSettings> {
+async function loadFilters(userId: string): Promise<FilterSettings & { action: FlaggedAction }> {
   const { data, error } = await db()
     .from('filters')
-    .select('sensitivity, categories, keywords, blocked_users')
+    .select('sensitivity, categories, keywords, blocked_users, flagged_action')
     .eq('user_id', userId)
     .maybeSingle();
   if (error) throw error;
@@ -164,6 +187,7 @@ async function loadFilters(userId: string): Promise<FilterSettings> {
     categories: data?.categories ?? {},
     keywords: data?.keywords ?? [],
     blockedUsers: data?.blocked_users ?? [],
+    action: data?.flagged_action === 'delete' || data?.flagged_action === 'hide' ? data.flagged_action : 'auto',
   };
 }
 
