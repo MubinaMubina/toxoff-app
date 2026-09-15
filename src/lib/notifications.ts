@@ -20,7 +20,7 @@ export async function registerForPushNotifications(): Promise<string | null> {
     await Notifications.setNotificationChannelAsync('moderation', {
       name: 'Moderation alerts',
       importance: Notifications.AndroidImportance.DEFAULT,
-      lightColor: '#534AB7',
+      lightColor: '#13433B',
     });
   }
 

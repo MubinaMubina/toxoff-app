@@ -96,7 +96,7 @@ We may also disclose information if required by law.
   the access token.
 - Remove toxoff from Instagram: Instagram > Settings > Apps and websites > toxoff > Remove.
 - Ask us for a copy of your information, or to correct it.
-- Delete your account and data: see https://sjfmcieunormozrybqmi.supabase.co/storage/v1/object/public/legal/delete-data.txt
+- Delete your account and data: see https://toxoff.app/delete-account.html
   or email support@toxoff.app from your account's email address.
 
 

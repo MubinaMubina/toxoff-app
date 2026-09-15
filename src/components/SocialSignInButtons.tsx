@@ -23,7 +23,7 @@ export function SocialSignInButtons({ onError }: { onError: (message: string | n
       const result: SocialSignInResult =
         provider === 'google' ? await signInWithGoogle() : await signInWithApple();
       if (!result) return;
-      router.replace(result.isNew ? '/(auth)/trial-started' : '/(tabs)');
+      router.replace(result.isNew ? '/(auth)/trial-started' : '/'); // '/' sends unfinished onboarding there
     } catch (e: any) {
       onError(e?.message ?? `${LABEL[provider]} sign-in failed.`);
     } finally {

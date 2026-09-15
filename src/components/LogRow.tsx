@@ -15,13 +15,22 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 export function LogRow({
   comment,
   onRestore,
+  onErase,
+  conceal,
 }: {
   comment: RemovedComment;
   onRestore: (id: string) => void;
+  /** Deleted comments only: wipe this one from the log for good. */
+  onErase: (id: string) => void;
+  /** Keep the words out of sight (the user's log visibility, ModerationContext.concealed). */
+  conceal: boolean;
 }) {
   const { colors, font } = useTheme();
   const [open, setOpen] = useState(false);
+  // Concealed words stay out of sight unless the user asks: the comment was removed for them.
+  const [revealed, setRevealed] = useState(false);
   const deleted = comment.action === 'deleted';
+  const concealed = conceal && !revealed;
   const platformName = comment.platform === 'instagram' ? 'Instagram' : 'TikTok';
 
   const toggle = () => {
@@ -54,12 +63,21 @@ export function LogRow({
               {timeAgo(comment.createdAt)}
             </Text>
           </View>
-          <Text
-            numberOfLines={open ? undefined : 1}
-            style={{ color: colors.text, fontSize: font.size.md, marginTop: 4, lineHeight: 20 }}
-          >
-            {comment.text}
-          </Text>
+          {concealed ? (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4, minHeight: 20 }}>
+              <Ionicons name="eye-off-outline" size={14} color={colors.textFaint} />
+              <Text style={{ color: colors.textFaint, fontSize: font.size.md, fontStyle: 'italic' }}>
+                {deleted ? 'Deleted' : 'Hidden'} for you · not shown
+              </Text>
+            </View>
+          ) : (
+            <Text
+              numberOfLines={open ? undefined : 1}
+              style={{ color: colors.text, fontSize: font.size.md, marginTop: 4, lineHeight: 20 }}
+            >
+              {comment.text}
+            </Text>
+          )}
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 }}>
             <ReasonBadge reason={comment.reason} />
             <Ionicons
@@ -92,12 +110,38 @@ export function LogRow({
           />
 
           {deleted ? (
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 }}>
-              <Ionicons name="trash-outline" size={16} color={colors.textMuted} />
-              <Text style={{ color: colors.textMuted, fontWeight: font.weight.semibold, fontSize: font.size.sm }}>
-                Deleted from {platformName}. This can’t be undone.
+            <>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 }}>
+                <Ionicons name="trash-outline" size={16} color={colors.textMuted} />
+                <Text style={{ color: colors.textMuted, fontWeight: font.weight.semibold, fontSize: font.size.sm }}>
+                  Deleted from {platformName}. This can’t be undone.
+                </Text>
+              </View>
+              <Pressable
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+                  onErase(comment.id);
+                }}
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 7,
+                  marginTop: 4,
+                  paddingVertical: 11,
+                  borderRadius: 10,
+                  backgroundColor: colors.dangerSoft,
+                }}
+              >
+                <Ionicons name="flame-outline" size={17} color={colors.danger} />
+                <Text style={{ color: colors.danger, fontWeight: font.weight.semibold, fontSize: font.size.sm }}>
+                  Erase from log forever
+                </Text>
+              </Pressable>
+              <Text style={{ color: colors.textFaint, fontSize: font.size.xs, textAlign: 'center' }}>
+                Erasing wipes its words from your log. It still counts on Home.
               </Text>
-            </View>
+            </>
           ) : comment.restored ? (
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 }}>
               <Ionicons name="arrow-undo" size={16} color={colors.success} />
@@ -132,6 +176,11 @@ export function LogRow({
             <Text style={{ color: colors.textFaint, fontSize: font.size.xs, textAlign: 'center' }}>
               Removed by mistake? Restoring re-publishes it on {platformName}.
             </Text>
+          )}
+          {concealed && (
+            <Pressable onPress={() => setRevealed(true)} hitSlop={8} style={{ alignSelf: 'center', paddingVertical: 4 }}>
+              <Text style={{ color: colors.textFaint, fontSize: font.size.xs }}>Read it anyway</Text>
+            </Pressable>
           )}
         </View>
       )}

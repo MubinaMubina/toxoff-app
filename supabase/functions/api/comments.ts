@@ -57,3 +57,37 @@ export async function restoreComment(req: Request): Promise<Response> {
   if (updateError) throw updateError;
   return json({ ok: true });
 }
+
+/** Rows to erase: every one of the user's deleted comments, or just the ids given. */
+export function eraseSelection(body: Record<string, unknown>): string[] | null {
+  if (body.commentIds === undefined) return null;
+  if (!Array.isArray(body.commentIds) || body.commentIds.length === 0 || body.commentIds.length > 500) {
+    throw new HttpError(400, 'Invalid comment list.');
+  }
+  for (const id of body.commentIds) {
+    if (typeof id !== 'string' || !UUID.test(id)) throw new HttpError(404, 'Comment not found.');
+  }
+  return body.commentIds as string[];
+}
+
+/** What an erased log row keeps: the fact a comment was deleted, and why. The words are gone. */
+export const ERASED = { text: '', username: '', language: null, post_ref: null } as const;
+
+// "Erase forever" in the app's log: wipes the text and author of deleted comments from the log so
+// the user never has to read them. The rows stay (erased_at set) so Home's counts are still right.
+// Only deleted comments qualify: hidden ones can still be restored, so their text is still needed.
+export async function eraseDeletedComments(req: Request): Promise<Response> {
+  const uid = await requireUser(req);
+  const ids = eraseSelection(await readJson(req));
+
+  let query = db()
+    .from('moderation_log')
+    .update({ ...ERASED, erased_at: new Date().toISOString() })
+    .eq('user_id', uid)
+    .eq('action', 'deleted')
+    .is('erased_at', null);
+  if (ids) query = query.in('id', ids);
+  const { data, error } = await query.select('id');
+  if (error) throw error;
+  return json({ erased: (data ?? []).map((r: { id: string }) => r.id) });
+}

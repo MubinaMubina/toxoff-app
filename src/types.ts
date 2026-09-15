@@ -22,6 +22,7 @@ export type RemovedComment = {
   createdAt: string; // ISO timestamp
   restored?: boolean;
   action?: 'hidden' | 'deleted'; // missing = hidden; deleted ones can't be restored
+  erased?: boolean; // a deleted comment whose text was erased from the log for good; not shown
 };
 
 export type ConnectedAccount = {
@@ -39,8 +40,9 @@ export type CategoryKey =
   | 'spam'
   | 'self_harm';
 
-// What happens to a flagged comment: 'hide' everything (can be restored), 'auto' (the default:
-// harassment the AI is at least 85% sure of is deleted, the rest hidden), or 'delete' everything.
+// What happens to a flagged comment: 'auto' (the default: anything toxic the AI is at least 80%
+// sure of is deleted for good, spam excepted, the rest hidden), 'hide' everything (can be
+// restored), or 'delete' everything.
 export type FlaggedAction = 'hide' | 'auto' | 'delete';
 
 export type FilterSettings = {
@@ -51,7 +53,16 @@ export type FilterSettings = {
   flaggedAction: FlaggedAction;
 };
 
-export type PlanId = 'free' | 'solo' | 'plus';
+// Onboarding answers (app/onboarding.tsx), kept on the profile. All changeable later in Settings.
+export type Persona = 'creator' | 'business' | 'public_figure' | 'manager';
+/** What the Log shows. Home always keeps comment text out of sight. */
+export type LogVisibility = 'all' | 'conceal_deleted' | 'count_only';
+/** Erase deleted comments from the log for good after this many days; null = never. */
+export type AutoEraseDays = 7 | 30 | null;
+/** A push for every removed comment, one daily summary, or none. */
+export type NotificationMode = 'each' | 'daily' | 'none';
+
+export type PlanId = 'free' | 'solo' | 'plus' | 'studio';
 export type PaidPlanId = Exclude<PlanId, 'free'>;
 
 export type Plan = {

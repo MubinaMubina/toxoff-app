@@ -1,317 +1,177 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
-import React, { useEffect } from 'react';
-import { Pressable, ScrollView, Switch, Text, View } from 'react-native';
+import React, { useState } from 'react';
+import { Pressable, RefreshControl, ScrollView, Switch, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { PlatformIcon } from '../../src/components/PlatformIcon';
 import { RemovedCommentRow } from '../../src/components/RemovedCommentRow';
-import { Button, Card, EmptyState, LIST_ROW, RowIcon, RowSeparator, SectionLabel } from '../../src/components/ui';
+import { Skeleton, SkeletonRows } from '../../src/components/Skeleton';
+import { Button, Card, LIST_ROW, RowIcon, RowSeparator, ScreenTitle, SectionLabel, Segmented } from '../../src/components/ui';
 import { useAuth } from '../../src/context/AuthContext';
 import { useModeration } from '../../src/context/ModerationContext';
-import { getPlan, INVITE_BONUS } from '../../src/data/plans';
-import { registerForPushNotifications } from '../../src/lib/notifications';
-import { fullTimestamp } from '../../src/lib/time';
-import { palette } from '../../src/theme/colors';
+import { getPlan } from '../../src/data/plans';
+import { getProtectionSummary } from '../../src/lib/protection';
+import { shortDate, timeAgo } from '../../src/lib/time';
 import { useTheme } from '../../src/theme/ThemeContext';
 
-function MetricCard({ value, label, accent }: { value: number; label: string; accent: string }) {
-  const { colors, font, radius } = useTheme();
-  return (
-    <View
-      style={{
-        flex: 1,
-        backgroundColor: colors.card,
-        borderRadius: radius.lg,
-        borderWidth: 0.5,
-        borderColor: colors.border,
-        padding: 14,
-      }}
-    >
-      <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: accent, marginBottom: 10 }} />
-      <Text style={{ color: colors.text, fontSize: font.size.xxl, fontWeight: font.weight.heavy }}>
-        {value.toLocaleString()}
-      </Text>
-      <Text style={{ color: colors.textMuted, fontSize: font.size.xs, marginTop: 2 }}>{label}</Text>
-    </View>
-  );
-}
-
-function FreeChecksCard({
-  title,
-  used,
-  limit,
-  onUpgrade,
-  onInvite,
-}: {
-  title: string;
-  used: number;
-  limit: number;
-  onUpgrade: () => void;
-  onInvite: () => void;
-}) {
-  const { colors, font, radius, spacing } = useTheme();
-  const reached = used >= limit;
-  return (
-    <Pressable onPress={onUpgrade} style={{ marginTop: spacing.xl }}>
-      <Card>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Text style={{ color: colors.text, fontSize: font.size.md, fontWeight: font.weight.semibold }}>
-            {title}
-          </Text>
-          <Text style={{ color: colors.primary, fontSize: font.size.sm, fontWeight: font.weight.semibold }}>
-            Upgrade
-          </Text>
-        </View>
-        <View
-          style={{
-            height: 8,
-            borderRadius: radius.pill,
-            backgroundColor: colors.surfaceAlt,
-            marginTop: 12,
-            overflow: 'hidden',
-          }}
-        >
-          <View
-            style={{
-              width: `${Math.min(100, (used / limit) * 100)}%`,
-              height: '100%',
-              backgroundColor: reached ? colors.danger : colors.primary,
-            }}
-          />
-        </View>
-        <Text
-          style={{
-            color: reached ? colors.danger : colors.textMuted,
-            fontSize: font.size.sm,
-            marginTop: 8,
-            lineHeight: 19,
-          }}
-        >
-          {reached
-            ? `You've used all ${limit} free comment checks, so new comments aren't being checked. Subscribe to keep moderating, or invite a friend for ${INVITE_BONUS} more.`
-            : `${used} of ${limit} free comment checks used`}
-        </Text>
-        {reached && (
-          <Button
-            label={`Invite a friend · +${INVITE_BONUS} checks`}
-            icon="gift-outline"
-            variant="secondary"
-            size="sm"
-            onPress={onInvite}
-            style={{ marginTop: 12 }}
-          />
-        )}
-      </Card>
-    </Pressable>
-  );
-}
+type Period = 'today' | 'week' | 'month';
+const PERIODS: { label: string; value: Period }[] = [
+  { label: '24 hours', value: 'today' },
+  { label: '7 days', value: 'week' },
+  { label: '30 days', value: 'month' },
+];
 
 export default function Dashboard() {
-  const { colors, font, spacing } = useTheme();
+  const { colors, font, spacing, radius } = useTheme();
   const router = useRouter();
   const { user, subscription } = useAuth();
   const {
-    metrics,
-    comments,
-    accounts,
-    togglePause,
-    notificationsEnabled,
-    savePushToken,
-    freeCommentsUsed,
-    freeCommentAllowance,
+    status, lastSyncedAt, reload, metrics, comments, accounts, togglePause,
+    freeCommentsUsed, freeCommentAllowance,
   } = useModeration();
+  const [period, setPeriod] = useState<Period>('today');
   const plan = getPlan(subscription.plan);
-  // Includes a plan chosen during the trial: from then on comments aren't counted.
   const paid = subscription.paying;
   const outOfFreeChecks = !paid && freeCommentsUsed >= freeCommentAllowance;
-
-  // Register for push alerts once if the user has them enabled.
-  useEffect(() => {
-    if (!notificationsEnabled) return;
-    registerForPushNotifications()
-      .then((token) => token && savePushToken(token))
-      .catch(() => {});
-  }, [notificationsEnabled, savePushToken]);
-
-  const feed = comments.slice(0, 6);
-  const firstName = user?.name?.split(' ')[0] ?? 'there';
+  const summary = getProtectionSummary({ accounts, maxAccounts: plan.maxAccounts, outOfFreeChecks, status });
+  const firstName = user?.name?.split(' ')[0] ?? 'Creator';
+  const loading = status === 'loading';
+  const activityUnavailable = status === 'offline' && !lastSyncedAt;
+  const feed = comments.slice(0, 3);
+  const tone = summary.tone === 'warning' ? colors.warning : colors.primary;
+  const action = summary.action;
+  const handleAction = () => {
+    if (action === 'retry') reload();
+    else router.push(action === 'upgrade' ? '/paywall' : '/connect-accounts');
+  };
+  const actionLabel = action === 'retry' ? 'Refresh status' : action === 'upgrade' ? 'See plans' : action === 'connect' ? 'Connect Instagram' : 'Manage accounts';
+  const modeDescription = status === 'offline' ? 'Last available activity' : 'Comments handled';
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }} edges={['top']}>
-      <ScrollView contentContainerStyle={{ padding: spacing.gutter, paddingBottom: 32 }} showsVerticalScrollIndicator={false}>
-        {/* Header */}
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-          <View>
-            <Text style={{ color: colors.textMuted, fontSize: font.size.md }}>Welcome back,</Text>
-            {/* Same size as the other tabs' titles (ScreenTitle). */}
-            <Text style={{ color: colors.text, fontSize: font.size.huge, fontWeight: font.weight.heavy }}>
-              {firstName} 👋
-            </Text>
-          </View>
+      <ScrollView
+        contentContainerStyle={{ padding: spacing.gutter, paddingBottom: 32 }}
+        refreshControl={<RefreshControl refreshing={loading} onRefresh={reload} tintColor={colors.primary} />}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+          <View style={{ flex: 1 }}><ScreenTitle title="Home" subtitle={`Welcome back, ${firstName}.`} /></View>
           <Pressable
-            onPress={() => router.push('/(tabs)/settings')}
-            hitSlop={4}
             accessibilityRole="button"
-            accessibilityLabel="Settings"
-            style={{
-              width: 42,
-              height: 42,
-              borderRadius: 21,
-              backgroundColor: colors.primarySoft,
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
+            accessibilityLabel="Open settings"
+            onPress={() => router.push('/(tabs)/settings')}
+            style={({ pressed }) => ({ width: 44, height: 44, borderRadius: 22, backgroundColor: colors.primarySoft, alignItems: 'center', justifyContent: 'center', opacity: pressed ? 0.7 : 1 })}
           >
-            <Text style={{ color: colors.primary, fontWeight: font.weight.bold, fontSize: font.size.lg }}>
-              {firstName[0]?.toUpperCase()}
-            </Text>
+            <Ionicons name="settings-outline" size={22} color={colors.primary} />
           </Pressable>
         </View>
 
-        {!paid && (
-          <FreeChecksCard
-            title={
-              subscription.status === 'trialing' && subscription.trialEndsAt
-                ? `${plan.name} trial · ends ${fullTimestamp(subscription.trialEndsAt).split(',')[0]}`
-                : 'Free plan'
-            }
-            used={freeCommentsUsed}
-            limit={freeCommentAllowance}
-            onUpgrade={() => router.push('/paywall')}
-            onInvite={() => router.push('/invite')}
-          />
+        <Card style={{ marginTop: spacing.xl, backgroundColor: summary.tone === 'warning' ? colors.warningSoft : colors.primarySoft, borderWidth: 0, padding: 20 }}>
+          <Ionicons name={summary.kind === 'active' ? 'shield-checkmark-outline' : summary.kind === 'paused' ? 'pause-circle-outline' : summary.tone === 'warning' ? 'alert-circle-outline' : 'shield-outline'} size={36} color={tone} />
+          <Text accessibilityRole="header" style={{ color: colors.text, fontSize: font.size.xxl, fontWeight: font.weight.bold, marginTop: 14 }}>{summary.title}</Text>
+          <Text style={{ color: colors.textMuted, fontSize: font.size.md, lineHeight: 22, marginTop: 8 }}>{summary.description}</Text>
+          {loading ? <Skeleton height={12} width="60%" style={{ marginTop: 14 }} /> : lastSyncedAt && (
+            <Text style={{ color: colors.textMuted, fontSize: font.size.sm, marginTop: 12 }}>Status updated {timeAgo(lastSyncedAt)}</Text>
+          )}
+          {action && <Button label={actionLabel} onPress={handleAction} size="md" style={{ marginTop: 16 }} />}
+          {summary.kind === 'quota' && (
+            <Button label="View invite rewards" variant="secondary" onPress={() => router.push('/invite')} size="sm" style={{ marginTop: 10 }} />
+          )}
+        </Card>
+
+        {!loading && !paid && (
+          <Card style={{ marginTop: spacing.md, padding: 16 }}>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+              <Text style={{ color: colors.textMuted, fontSize: font.size.sm, flexShrink: 1 }}>
+                {subscription.status === 'trialing' && subscription.trialEndsAt ? `${plan.name} trial · ends ${shortDate(subscription.trialEndsAt)}` : 'Free plan'}
+              </Text>
+              <Pressable accessibilityRole="button" onPress={() => router.push('/paywall')} style={{ minHeight: 44, justifyContent: 'center', paddingHorizontal: 8 }}>
+                <Text style={{ color: colors.primary, fontSize: font.size.sm, fontWeight: font.weight.semibold }}>See plans</Text>
+              </Pressable>
+            </View>
+            {!activityUnavailable && <View accessibilityRole="progressbar" accessibilityLabel="Free comment checks used" accessibilityValue={{ min: 0, max: freeCommentAllowance, now: Math.min(freeCommentsUsed, freeCommentAllowance) }} style={{ height: 5, borderRadius: radius.pill, backgroundColor: colors.surfaceAlt, overflow: 'hidden' }}>
+              <View style={{ width: `${Math.min(100, freeCommentsUsed / Math.max(1, freeCommentAllowance) * 100)}%`, height: '100%', backgroundColor: outOfFreeChecks ? colors.warning : colors.primary }} />
+            </View>}
+            <Text style={{ color: colors.text, fontSize: font.size.md, fontWeight: font.weight.semibold, marginTop: 10 }}>{activityUnavailable ? 'Usage unavailable' : `${freeCommentsUsed} of ${freeCommentAllowance} free checks used`}</Text>
+          </Card>
         )}
 
-        {/* Metrics */}
-        <View style={{ marginTop: spacing.xl }}>
-          <SectionLabel>Comments removed</SectionLabel>
-          <View style={{ flexDirection: 'row', gap: 10 }}>
-            <MetricCard value={metrics.today} label="Today" accent={palette.purple} />
-            <MetricCard value={metrics.week} label="This week" accent={palette.blue} />
-            <MetricCard value={metrics.month} label="This month" accent={palette.green} />
-          </View>
-        </View>
-
-        {/* Accounts pause/resume */}
-        <View style={{ marginTop: spacing.xl }}>
-          <SectionLabel action={{ label: 'Manage', onPress: () => router.push('/connect-accounts') }}>
-            Moderation
-          </SectionLabel>
-          {accounts.length === 0 ? (
-            <Card>
-              <Pressable
-                onPress={() => router.push('/connect-accounts')}
-                style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}
-              >
-                <Ionicons name="add-circle-outline" size={24} color={colors.primary} />
-                <Text style={{ color: colors.text, fontSize: font.size.md, fontWeight: font.weight.medium, flex: 1 }}>
-                  Connect an account to start moderating
-                </Text>
-                <Ionicons name="chevron-forward" size={18} color={colors.textFaint} />
-              </Pressable>
-            </Card>
-          ) : (
+        {accounts.length > 0 && (
+          <View style={{ marginTop: spacing.xl }}>
+            <SectionLabel action={{ label: 'Manage', onPress: () => router.push('/connect-accounts') }}>Your accounts</SectionLabel>
             <Card padded={false}>
-              {accounts.map((acc, i) => {
-                // After a downgrade, only the oldest accounts within the plan's limit are moderated.
-                const overLimit = i >= plan.maxAccounts;
-                const needsUpgrade = overLimit || outOfFreeChecks;
-                const status = !acc.connected
-                  ? 'Reconnect needed'
-                  : overLimit
-                    ? `Not moderated on ${plan.name}`
-                    : outOfFreeChecks
-                      ? 'Not moderating · free checks used up'
-                      : acc.paused
-                        ? 'Paused'
-                        : 'Active · moderating';
-                const healthy = acc.connected && !needsUpgrade && !acc.paused;
+              {accounts.map((account, index) => {
+                const unsupported = account.platform !== 'instagram';
+                const overLimit = index >= plan.maxAccounts;
+                const accountStatus = status !== 'ready' ? 'Status unavailable' : unsupported ? 'Coming soon' : !account.connected ? 'Reconnect needed' : overLimit ? `Outside your ${plan.name} limit` : outOfFreeChecks ? 'Free checks used up' : account.paused ? 'Paused' : 'Protection on';
+                const healthy = status === 'ready' && !unsupported && account.connected && !overLimit && !outOfFreeChecks && !account.paused;
                 return (
-                  <React.Fragment key={acc.id}>
-                    {i > 0 && <RowSeparator />}
-                    <View
-                      style={{
-                        flexDirection: 'row',
-                        alignItems: 'center',
-                        gap: LIST_ROW.gap,
-                        paddingHorizontal: LIST_ROW.inset,
-                        paddingVertical: 14,
-                      }}
-                    >
-                      <RowIcon>
-                        <PlatformIcon platform={acc.platform} size={17} withBackground />
-                      </RowIcon>
+                  <React.Fragment key={account.id}>
+                    {index > 0 && <RowSeparator />}
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: LIST_ROW.gap, paddingHorizontal: LIST_ROW.inset, paddingVertical: 16 }}>
+                      <RowIcon><PlatformIcon platform={account.platform} size={17} withBackground /></RowIcon>
                       <View style={{ flex: 1 }}>
-                        <Text style={{ color: colors.text, fontSize: font.size.md, fontWeight: font.weight.medium }}>
-                          {acc.handle}
-                        </Text>
-                        <Text
-                          style={{
-                            color: healthy ? colors.success : colors.warning,
-                            fontSize: font.size.xs,
-                            marginTop: 1,
-                            fontWeight: font.weight.medium,
-                          }}
-                        >
-                          {status}
-                        </Text>
+                        <Text style={{ color: colors.text, fontSize: font.size.md, fontWeight: font.weight.semibold }}>{account.handle}</Text>
+                        <Text style={{ color: healthy ? colors.primary : colors.textMuted, fontSize: font.size.sm, marginTop: 4 }}>{accountStatus}</Text>
                       </View>
-                      {!acc.connected || needsUpgrade ? (
-                        <Pressable
-                          onPress={() => router.push(acc.connected ? '/paywall' : '/connect-accounts')}
-                          hitSlop={8}
-                        >
-                          <Text style={{ color: colors.primary, fontSize: font.size.sm, fontWeight: font.weight.semibold }}>
-                            {acc.connected ? 'Upgrade' : 'Fix'}
-                          </Text>
-                        </Pressable>
-                      ) : (
+                      {account.connected && !unsupported && !overLimit && !outOfFreeChecks ? (
                         <Switch
-                          value={!acc.paused}
-                          onValueChange={() => {
-                            Haptics.selectionAsync().catch(() => {});
-                            togglePause(acc.id);
-                          }}
-                          trackColor={{ false: colors.border, true: colors.primary }}
-                          thumbColor="#fff"
+                          accessibilityLabel={`Moderation for ${account.handle}`}
+                          accessibilityHint="Pause or resume checking new comments."
+                          value={!account.paused}
+                          disabled={status !== 'ready'}
+                          onValueChange={() => { Haptics.selectionAsync().catch(() => {}); togglePause(account.id); }}
+                          trackColor={{ false: colors.border, true: colors.primary }} thumbColor="#FFFFFF"
                         />
+                      ) : (
+                        <Pressable accessibilityRole="button" accessibilityLabel={`Manage ${account.handle}`} onPress={() => router.push('/connect-accounts')} style={{ minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' }}>
+                          <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
+                        </Pressable>
                       )}
                     </View>
                   </React.Fragment>
                 );
               })}
             </Card>
-          )}
+          </View>
+        )}
+
+        <View style={{ marginTop: spacing.xl }}>
+          <SectionLabel>{modeDescription}</SectionLabel>
+          <Segmented options={PERIODS} value={period} onChange={setPeriod} />
+          <View style={{ paddingVertical: 20 }}>
+            {loading ? <Skeleton width="25%" height={44} /> : (
+              <Text accessibilityLabel={activityUnavailable ? 'Activity unavailable' : undefined} style={{ color: colors.text, fontSize: 44, fontWeight: font.weight.bold, fontVariant: ['tabular-nums'] }}>{activityUnavailable ? '—' : metrics[period].toLocaleString()}</Text>
+            )}
+            <Text style={{ color: colors.textMuted, fontSize: font.size.md, lineHeight: 22, marginTop: 4 }}>
+              {activityUnavailable ? 'Connect to load your activity.' : `${metrics[period] === 1 ? 'Comment hidden or deleted' : 'Comments hidden or deleted'} · last ${period === 'today' ? '24 hours' : period === 'week' ? '7 days' : '30 days'}`}
+            </Text>
+          </View>
         </View>
 
-        {/* Live feed */}
-        <View style={{ marginTop: spacing.xl }}>
-          <SectionLabel
-            action={feed.length > 0 ? { label: 'See all', onPress: () => router.push('/(tabs)/log') } : undefined}
-          >
-            Recently removed
-          </SectionLabel>
-
-          {feed.length === 0 ? (
-            <Card>
-              <EmptyState
-                icon="shield-checkmark-outline"
-                title="All clear"
-                subtitle="No toxic comments removed yet. We'll show them here the moment we catch one."
-              />
-            </Card>
+        <View style={{ marginTop: spacing.sm }}>
+          <SectionLabel action={{ label: 'Open log', onPress: () => router.push('/(tabs)/log') }}>Recent activity</SectionLabel>
+          <Text style={{ color: colors.textMuted, fontSize: font.size.sm, lineHeight: 20, marginBottom: 12 }}>The words stay out of sight here. Review a comment only when you choose.</Text>
+          {loading ? <SkeletonRows count={2} /> : feed.length === 0 ? (
+            <View style={{ borderTopWidth: 0.5, borderColor: colors.border, paddingVertical: 20 }}>
+              <Text style={{ color: colors.text, fontSize: font.size.md, fontWeight: font.weight.semibold }}>{activityUnavailable ? 'Activity unavailable' : 'No recent activity'}</Text>
+              <Text style={{ color: colors.textMuted, fontSize: font.size.sm, lineHeight: 20, marginTop: 6 }}>
+                {summary.kind === 'unconnected' ? 'Connect Instagram to start checking comments.' : status === 'offline' ? 'Refresh your connection to see the latest activity.' : 'Comments handled by toxoff will appear here.'}
+              </Text>
+            </View>
           ) : (
             <Card padded={false}>
-              {feed.map((c, i) => (
-                <React.Fragment key={c.id}>
-                  {i > 0 && <RowSeparator />}
-                  <RemovedCommentRow comment={c} />
+              {feed.map((comment, index) => (
+                <React.Fragment key={comment.id}>
+                  {index > 0 && <RowSeparator inset={16} />}
+                  <RemovedCommentRow comment={comment} concealed />
                 </React.Fragment>
               ))}
             </Card>
           )}
         </View>
+
       </ScrollView>
     </SafeAreaView>
   );

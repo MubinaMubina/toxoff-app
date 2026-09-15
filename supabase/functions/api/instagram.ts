@@ -21,6 +21,10 @@ export class InstagramError extends Error {
   get gone() {
     return this.code === 100 && this.subcode === 33;
   }
+  /** Meta's rate limit: app-level (4), user-level (17), page-level (32), business (613), or a 429. */
+  get rateLimited() {
+    return this.status === 429 || [4, 17, 32, 613].includes(this.code ?? -1);
+  }
 }
 
 export type Token = { accessToken: string; expiresAt: string };
@@ -140,7 +144,8 @@ export async function getMedia(
 
 // ---------- polling (poll.ts): used until Meta sends comment webhooks ----------
 
-export type PolledMedia = { id: string; media_product_type?: string; timestamp?: string };
+export type CommentPage = { data?: PolledComment[]; paging?: { next?: string } };
+export type PolledMedia = { id: string; media_product_type?: string; timestamp?: string; comments?: CommentPage };
 export type PolledComment = {
   id: string;
   text?: string;
@@ -157,32 +162,49 @@ const MAX_COMMENT_PAGES = 4;
 /** Instagram writes "2026-09-14T10:00:00+0000"; the offset needs a colon to parse everywhere. */
 export const parseTime = (timestamp: string) => Date.parse(timestamp.replace(/([+-]\d\d)(\d\d)$/, '$1:$2'));
 
-/** The account's newest posts. */
-export async function recentMedia(token: string, limit: number): Promise<PolledMedia[]> {
+const COMMENT_PAGE = 50;
+
+/**
+ * The account's newest posts, each with its first page of comments (newest first, replies
+ * included), in ONE request: the poller runs every 30 seconds, so a call per post would eat the
+ * account's Meta rate limit. `recentComments` continues from that page when a post needs more.
+ */
+export async function recentMediaWithComments(token: string, limit: number): Promise<PolledMedia[]> {
   const body = await request<{ data?: PolledMedia[] }>(
-    graphUrl('me/media', { fields: 'id,media_product_type,timestamp', limit: String(limit), access_token: token })
+    graphUrl('me/media', {
+      fields: `id,media_product_type,timestamp,comments.limit(${COMMENT_PAGE}){${COMMENT_FIELDS},replies{${COMMENT_FIELDS}}}`,
+      limit: String(limit),
+      access_token: token,
+    })
   );
   return body.data ?? [];
 }
 
 /**
- * A post's top-level comments, newest first, with their replies. Stops once a page reaches
- * comments older than `since` (the rest are older too). Replies only come with their top-level
- * comment, so a new reply under an older comment is only seen while that comment is in the pages read.
+ * A post's top-level comments, newest first, with their replies, starting from `first` when a page
+ * is already in hand (recentMediaWithComments) and from the post's comments edge otherwise. Stops
+ * once a page reaches comments older than `since` (the rest are older too). Replies only come with
+ * their top-level comment, so a new reply under an older comment is only seen while that comment
+ * is in the pages read.
  */
-export async function recentComments(mediaId: string, token: string, since: number): Promise<PolledComment[]> {
+export async function recentComments(
+  mediaId: string,
+  token: string,
+  since: number,
+  first?: CommentPage
+): Promise<PolledComment[]> {
   const comments: PolledComment[] = [];
-  let url: string | undefined = graphUrl(`${mediaId}/comments`, {
+  let next: string | CommentPage | undefined = first ?? graphUrl(`${mediaId}/comments`, {
     fields: `${COMMENT_FIELDS},replies{${COMMENT_FIELDS}}`,
-    limit: '50',
+    limit: String(COMMENT_PAGE),
     access_token: token,
   });
-  for (let page = 0; url && page < MAX_COMMENT_PAGES; page++) {
-    const body: { data?: PolledComment[]; paging?: { next?: string } } = await request(url);
+  for (let page = 0; next && page < MAX_COMMENT_PAGES; page++) {
+    const body: CommentPage = typeof next === 'string' ? await request(next) : next;
     const data = body.data ?? [];
     comments.push(...data);
     if (!data.length || data.some((c) => parseTime(c.timestamp) < since)) break;
-    url = body.paging?.next;
+    next = body.paging?.next;
   }
   return comments;
 }

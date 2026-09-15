@@ -21,11 +21,15 @@ import { apiPost } from '../lib/api';
 import { isSupabaseConfigured, supabase } from '../lib/supabase';
 import { DAY_MS } from '../lib/time';
 import {
+  AutoEraseDays,
   CategoryKey,
   ConnectedAccount,
   FilterSettings,
   FlaggedAction,
+  LogVisibility,
   ModerationReason,
+  NotificationMode,
+  Persona,
   Platform,
   RemovedComment,
   Sensitivity,
@@ -34,18 +38,54 @@ import { useAuth } from './AuthContext';
 
 type Metrics = { today: number; week: number; month: number };
 
+/** Preferences set during onboarding (app/onboarding.tsx); each changeable later in Settings. */
+export type Preferences = {
+  persona: Persona | null;
+  logVisibility: LogVisibility;
+  autoEraseDays: AutoEraseDays;
+  notificationMode: NotificationMode;
+};
+
+export type OnboardingAnswers = Preferences & {
+  sensitivity: Sensitivity;
+  categories: Record<CategoryKey, boolean>;
+  keywords: string[];
+  flaggedAction?: FlaggedAction;
+  pushToken?: string | null; // omitted: preserve the existing token and permission
+};
+
+const DEFAULT_PREFERENCES: Preferences = {
+  persona: null,
+  logVisibility: 'conceal_deleted',
+  autoEraseDays: null,
+  notificationMode: 'each',
+};
+
+/** loading: first fetch in flight (screens show skeletons); offline: it failed (banner + retry). */
+export type LoadStatus = 'loading' | 'ready' | 'offline';
+
 type ModerationValue = {
+  status: LoadStatus;
+  /** When the app last fetched account status; not a moderation-engine heartbeat. */
+  lastSyncedAt: string | null;
+  /** Fetches everything again, e.g. from the offline banner. */
+  reload: () => void;
   accounts: ConnectedAccount[];
-  comments: RemovedComment[]; // active (not restored), newest first
+  comments: RemovedComment[]; // active (not restored, not erased), newest first
   filters: FilterSettings;
+  preferences: Preferences;
+  /** Whether this comment's words should stay out of sight, per the user's log visibility. */
+  concealed: (c: RemovedComment) => boolean;
   notificationsEnabled: boolean;
   metrics: Metrics;
   freeCommentsUsed: number; // of freeCommentAllowance, shared by the trial and Free
   freeCommentAllowance: number; // FREE_COMMENT_ALLOWANCE plus checks earned by inviting friends
-  connectAccount: (platform: Platform) => Promise<void>;
+  connectAccount: (platform: Platform, returnPath?: 'connect-accounts' | 'onboarding') => Promise<void>;
   disconnectAccount: (id: string) => Promise<void>;
   togglePause: (id: string) => void;
   restoreComment: (id: string) => Promise<void>;
+  /** Wipes deleted comments from the log for good: the ids given, or all of them. */
+  eraseDeletedComments: (ids?: string[]) => Promise<void>;
   setSensitivity: (s: Sensitivity) => void;
   setFlaggedAction: (a: FlaggedAction) => void;
   toggleCategory: (c: CategoryKey) => void;
@@ -55,6 +95,13 @@ type ModerationValue = {
   removeBlockedUser: (u: string) => void;
   setNotificationsEnabled: (v: boolean) => void;
   savePushToken: (token: string) => void;
+  setPersona: (p: Persona) => void;
+  setLogVisibility: (v: LogVisibility) => void;
+  setAutoEraseDays: (d: AutoEraseDays) => void;
+  /** 'none' also turns notifications off; the other modes turn them on. */
+  setNotificationMode: (m: NotificationMode) => void;
+  /** Saves every onboarding answer at once: filters and preferences. */
+  applyOnboarding: (answers: OnboardingAnswers) => Promise<void>;
 };
 
 type AccountRow = {
@@ -76,6 +123,7 @@ type LogRow = {
   post_ref: string | null;
   restored: boolean | null;
   action: 'hidden' | 'deleted' | null;
+  erased_at: string | null;
   created_at: string;
 };
 
@@ -91,8 +139,28 @@ const ModerationContext = createContext<ModerationValue | undefined>(undefined);
 
 const ACCOUNT_COLUMNS = 'id, platform, handle, connected, paused';
 const LOG_COLUMNS =
-  'id, platform, username, text, reason, confidence, language, post_ref, restored, action, created_at';
+  'id, platform, username, text, reason, confidence, language, post_ref, restored, action, erased_at, created_at';
 const LOG_LIMIT = 200;
+
+const PROFILE_PREFS =
+  'notifications_enabled, free_comments_used, bonus_comment_checks, persona, log_visibility, auto_erase_days, notification_mode';
+
+type ProfilePrefsRow = {
+  notifications_enabled: boolean;
+  free_comments_used: number;
+  bonus_comment_checks: number | null;
+  persona: Persona | null;
+  log_visibility: LogVisibility | null;
+  auto_erase_days: number | null;
+  notification_mode: NotificationMode | null;
+};
+
+const toPreferences = (p: ProfilePrefsRow): Preferences => ({
+  persona: p.persona ?? null,
+  logVisibility: p.log_visibility ?? DEFAULT_PREFERENCES.logVisibility,
+  autoEraseDays: p.auto_erase_days === 7 || p.auto_erase_days === 30 ? p.auto_erase_days : null,
+  notificationMode: p.notification_mode ?? DEFAULT_PREFERENCES.notificationMode,
+});
 
 const ZERO_METRICS: Metrics = { today: 0, week: 0, month: 0 };
 const EMPTY_FILTERS: FilterSettings = {
@@ -123,6 +191,7 @@ const toComment = (r: LogRow): RemovedComment => ({
   createdAt: r.created_at,
   restored: r.restored ?? false,
   action: r.action ?? 'hidden',
+  erased: r.erased_at != null,
 });
 
 const toFilters = (r: FiltersRow): FilterSettings => ({
@@ -161,6 +230,10 @@ export function ModerationProvider({ children }: { children: React.ReactNode }) 
     isSupabaseConfigured ? EMPTY_FILTERS : DEFAULT_FILTERS
   );
   const [notificationsEnabled, setNotificationsEnabledState] = useState(true);
+  const [preferences, setPreferences] = useState<Preferences>(DEFAULT_PREFERENCES);
+  const [status, setStatus] = useState<LoadStatus>(isSupabaseConfigured ? 'loading' : 'ready');
+  const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
+  const [reloadTick, setReloadTick] = useState(0);
   const [liveMetrics, setLiveMetrics] = useState<Metrics>(ZERO_METRICS);
   const [freeCommentsUsed, setFreeCommentsUsed] = useState(
     isSupabaseConfigured ? 0 : MOCK_FREE_COMMENTS_USED
@@ -184,6 +257,7 @@ export function ModerationProvider({ children }: { children: React.ReactNode }) 
       .order('created_at');
     if (error) throw error;
     setAccounts((data as AccountRow[]).map(toAccount));
+    setLastSyncedAt(new Date().toISOString());
   }, [userId]);
 
   useEffect(() => {
@@ -192,13 +266,17 @@ export function ModerationProvider({ children }: { children: React.ReactNode }) 
       setAccounts([]);
       setAllComments([]);
       setFilters(EMPTY_FILTERS);
+      setPreferences(DEFAULT_PREFERENCES);
       setLiveMetrics(ZERO_METRICS);
       setFreeCommentsUsed(0);
       setBonusChecks(0);
+      setLastSyncedAt(null);
+      setStatus('loading'); // the next user starts with skeletons, not the last one's data
       return;
     }
 
     let cancelled = false;
+    setStatus('loading');
     (async () => {
       const [acc, flt, log, prof] = await Promise.all([
         supabase.from('accounts').select(ACCOUNT_COLUMNS).eq('user_id', userId).order('created_at'),
@@ -215,28 +293,50 @@ export function ModerationProvider({ children }: { children: React.ReactNode }) 
           .limit(LOG_LIMIT),
         supabase
           .from('profiles')
-          .select('notifications_enabled, free_comments_used, bonus_comment_checks')
+          .select(PROFILE_PREFS)
           .eq('id', userId)
           .maybeSingle(),
       ]);
       if (cancelled) return;
       const error = acc.error ?? flt.error ?? log.error ?? prof.error;
-      if (error) console.warn('Could not load moderation data', error.message);
+      if (error) {
+        // Most often no connection; the screens show a banner with Retry instead of empty states.
+        console.warn('Could not load moderation data', error.message);
+        setStatus('offline');
+        return;
+      }
+      setStatus('ready');
+      setLastSyncedAt(new Date().toISOString());
       setAccounts(((acc.data ?? []) as AccountRow[]).map(toAccount));
       setAllComments(((log.data ?? []) as LogRow[]).map(toComment));
       if (flt.data) setFilters(toFilters(flt.data as FiltersRow));
       if (prof.data) {
-        setNotificationsEnabledState(prof.data.notifications_enabled);
-        setFreeCommentsUsed(prof.data.free_comments_used);
-        setBonusChecks(prof.data.bonus_comment_checks ?? 0);
+        const p = prof.data as ProfilePrefsRow;
+        setNotificationsEnabledState(p.notifications_enabled);
+        setFreeCommentsUsed(p.free_comments_used);
+        setBonusChecks(p.bonus_comment_checks ?? 0);
+        setPreferences(toPreferences(p));
       }
-    })().catch((e) => console.warn('Could not load moderation data', e));
+    })().catch((e) => {
+      if (cancelled) return;
+      console.warn('Could not load moderation data', e);
+      setStatus('offline');
+    });
     refreshMetrics();
 
     // The backend's writes show up without a refresh: removed comments, the free-checks meter and
     // checks earned by invites.
     const channel = supabase
       .channel(`moderation:${userId}`)
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'accounts', filter: `user_id=eq.${userId}` },
+        (payload) => {
+          const account = toAccount(payload.new as AccountRow);
+          setAccounts((prev) => prev.map((item) => item.id === account.id ? account : item));
+          setLastSyncedAt(new Date().toISOString());
+        }
+      )
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'moderation_log', filter: `user_id=eq.${userId}` },
@@ -260,7 +360,9 @@ export function ModerationProvider({ children }: { children: React.ReactNode }) 
       cancelled = true;
       supabase.removeChannel(channel);
     };
-  }, [userId, refreshMetrics]);
+  }, [userId, refreshMetrics, reloadTick]);
+
+  const reload = useCallback(() => setReloadTick((t) => t + 1), []);
 
   // Filter edits are saved half a second after the last change, so rapid toggles make one write.
   useEffect(() => {
@@ -292,21 +394,24 @@ export function ModerationProvider({ children }: { children: React.ReactNode }) 
   const comments = useMemo(
     () =>
       allComments
-        .filter((c) => !c.restored)
+        .filter((c) => !c.restored && !c.erased)
         .sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt)),
     [allComments]
   );
 
+  // Erased comments still count: they were removed, only their words are gone (as in fetchMetrics).
   const demoMetrics = useMemo<Metrics>(() => {
     const now = Date.now();
-    const within = (ms: number) => comments.filter((c) => now - +new Date(c.createdAt) <= ms).length;
+    const counted = allComments.filter((c) => !c.restored);
+    const within = (ms: number) => counted.filter((c) => now - +new Date(c.createdAt) <= ms).length;
     return { today: within(DAY_MS), week: within(7 * DAY_MS), month: within(30 * DAY_MS) };
-  }, [comments]);
+  }, [allComments]);
 
   const metrics = isSupabaseConfigured ? liveMetrics : demoMetrics;
 
   const connectAccount = useCallback(
-    async (platform: Platform) => {
+    async (platform: Platform, returnPath: 'connect-accounts' | 'onboarding' = 'connect-accounts') => {
+      if (platform !== 'instagram') throw new Error('TikTok support is coming soon. Connect Instagram to start protection.');
       if (!userId) {
         await new Promise((resolve) => setTimeout(resolve, 1100)); // simulated consent screen
         setAccounts((prev) => [
@@ -322,7 +427,7 @@ export function ModerationProvider({ children }: { children: React.ReactNode }) 
         return;
       }
       // The backend's OAuth callback sends the browser back here (Expo Go uses an exp:// URL).
-      const returnUrl = AuthSession.makeRedirectUri({ scheme: 'toxoff', path: 'connect-accounts' });
+      const returnUrl = AuthSession.makeRedirectUri({ scheme: 'toxoff', path: returnPath });
       const { url } = await apiPost<{ url: string }>('/connect/start', { platform, returnUrl });
       const result = await WebBrowser.openAuthSessionAsync(url, returnUrl);
       if (result.type !== 'success') return;
@@ -379,6 +484,19 @@ export function ModerationProvider({ children }: { children: React.ReactNode }) 
       refreshMetrics();
     },
     [userId, refreshMetrics]
+  );
+
+  // The backend wipes the text and author but keeps the rows, so Home's counts don't change.
+  const eraseDeletedComments = useCallback(
+    async (ids?: string[]) => {
+      if (userId) await apiPost('/comments/erase-deleted', ids ? { commentIds: ids } : {});
+      setAllComments((prev) =>
+        prev.map((c) =>
+          c.action === 'deleted' && (!ids || ids.includes(c.id)) ? { ...c, text: '', username: '', erased: true } : c
+        )
+      );
+    },
+    [userId]
   );
 
   const setSensitivity = useCallback(
@@ -469,11 +587,102 @@ export function ModerationProvider({ children }: { children: React.ReactNode }) 
     [userId]
   );
 
+  // Preferences are saved straight away, one column each; the state updates first.
+  const savePreference = useCallback(
+    (patch: Partial<Preferences>, columns: Record<string, unknown>) => {
+      setPreferences((p) => ({ ...p, ...patch }));
+      if (!userId) return;
+      supabase
+        .from('profiles')
+        .update(columns)
+        .eq('id', userId)
+        .then(({ error }) => {
+          if (error) Alert.alert('Could not save your preference', error.message);
+        });
+    },
+    [userId]
+  );
+
+  const setPersona = useCallback((persona: Persona) => savePreference({ persona }, { persona }), [savePreference]);
+  const setLogVisibility = useCallback(
+    (logVisibility: LogVisibility) => savePreference({ logVisibility }, { log_visibility: logVisibility }),
+    [savePreference]
+  );
+  const setAutoEraseDays = useCallback(
+    (autoEraseDays: AutoEraseDays) => savePreference({ autoEraseDays }, { auto_erase_days: autoEraseDays }),
+    [savePreference]
+  );
+  const setNotificationMode = useCallback(
+    (notificationMode: NotificationMode) => {
+      setNotificationsEnabledState(notificationMode !== 'none');
+      savePreference(
+        { notificationMode },
+        { notification_mode: notificationMode, notifications_enabled: notificationMode !== 'none' }
+      );
+    },
+    [savePreference]
+  );
+
+  const applyOnboarding = useCallback(
+    async (a: OnboardingAnswers) => {
+      const nextFilters: FilterSettings = {
+        ...filters,
+        sensitivity: a.sensitivity,
+        categories: a.categories,
+        keywords: a.keywords,
+        flaggedAction: a.flaggedAction ?? 'auto',
+      };
+      const notificationsOn = a.notificationMode !== 'none' &&
+        (a.pushToken === undefined ? notificationsEnabled : a.pushToken !== null);
+      if (userId) {
+        // Confirm the filter row was saved before onboarding may connect an account.
+        const f = await supabase
+          .from('filters')
+          .update({ sensitivity: a.sensitivity, categories: a.categories, keywords: a.keywords, flagged_action: nextFilters.flaggedAction })
+          .eq('user_id', userId)
+          .select('user_id')
+          .single();
+        if (f.error) throw f.error;
+        const p = await supabase
+          .from('profiles')
+          .update({
+            persona: a.persona,
+            log_visibility: a.logVisibility,
+            auto_erase_days: a.autoEraseDays,
+            notification_mode: a.notificationMode,
+            notifications_enabled: notificationsOn,
+            ...(a.pushToken !== undefined ? { push_token: a.pushToken } : {}),
+          })
+          .eq('id', userId)
+          .select('id')
+          .single();
+        if (p.error) throw p.error;
+      }
+      filtersDirty.current = false;
+      setFilters(nextFilters);
+      setPreferences({ persona: a.persona, logVisibility: a.logVisibility, autoEraseDays: a.autoEraseDays, notificationMode: a.notificationMode });
+      setNotificationsEnabledState(notificationsOn);
+    },
+    [filters, userId, notificationsEnabled]
+  );
+
+  const concealed = useCallback(
+    (c: RemovedComment) =>
+      preferences.logVisibility === 'count_only' ||
+      (preferences.logVisibility === 'conceal_deleted' && c.action === 'deleted'),
+    [preferences.logVisibility]
+  );
+
   const value = useMemo<ModerationValue>(
     () => ({
+      status,
+      lastSyncedAt,
+      reload,
       accounts,
       comments,
       filters,
+      preferences,
+      concealed,
       notificationsEnabled,
       metrics,
       freeCommentsUsed,
@@ -482,6 +691,7 @@ export function ModerationProvider({ children }: { children: React.ReactNode }) 
       disconnectAccount,
       togglePause,
       restoreComment,
+      eraseDeletedComments,
       setSensitivity,
       setFlaggedAction,
       toggleCategory,
@@ -491,11 +701,21 @@ export function ModerationProvider({ children }: { children: React.ReactNode }) 
       removeBlockedUser,
       setNotificationsEnabled,
       savePushToken,
+      setPersona,
+      setLogVisibility,
+      setAutoEraseDays,
+      setNotificationMode,
+      applyOnboarding,
     }),
     [
+      status,
+      lastSyncedAt,
+      reload,
       accounts,
       comments,
       filters,
+      preferences,
+      concealed,
       notificationsEnabled,
       metrics,
       freeCommentsUsed,
@@ -504,6 +724,7 @@ export function ModerationProvider({ children }: { children: React.ReactNode }) 
       disconnectAccount,
       togglePause,
       restoreComment,
+      eraseDeletedComments,
       setSensitivity,
       setFlaggedAction,
       toggleCategory,
@@ -513,6 +734,11 @@ export function ModerationProvider({ children }: { children: React.ReactNode }) 
       removeBlockedUser,
       setNotificationsEnabled,
       savePushToken,
+      setPersona,
+      setLogVisibility,
+      setAutoEraseDays,
+      setNotificationMode,
+      applyOnboarding,
     ]
   );
 

@@ -35,7 +35,7 @@ export default function Login() {
     setLoading(true);
     try {
       await signIn(email.trim(), password);
-      router.replace('/(tabs)');
+      router.replace('/'); // the index decides: onboarding if never done, else the tabs
     } catch (e: any) {
       setError(e?.message ?? 'Could not log in.');
     } finally {
@@ -78,7 +78,12 @@ export default function Login() {
               isPassword
             />
 
-            <Pressable style={{ alignSelf: 'flex-end' }}>
+            <Pressable
+              onPress={() => router.push({ pathname: '/(auth)/forgot-password', params: { email: email.trim() } })}
+              accessibilityRole="button"
+              accessibilityLabel="Reset your password"
+              style={{ alignSelf: 'flex-end', minHeight: 44, justifyContent: 'center' }}
+            >
               <Text style={{ color: colors.primary, fontSize: font.size.sm, fontWeight: font.weight.medium }}>
                 Forgot password?
               </Text>

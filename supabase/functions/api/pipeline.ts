@@ -2,8 +2,17 @@ import { classify } from './classifier.ts';
 import { db, markNeedsReconnect } from './db.ts';
 import { env } from './env.ts';
 import { type CommentEvent, deleteComment, getMedia, InstagramError, setCommentHidden } from './instagram.ts';
-import { chooseAction, decide, type FilterSettings, type FlaggedAction, type ModerationReason } from './moderation.ts';
+import { chooseAction, decide, type FilterSettings, type FlaggedAction, type ModerationReason, type Scores } from './moderation.ts';
 import { sendPush } from './push.ts';
+
+/** "slurs 95, harassment 40" for the logs, strongest first; "none" when nothing scored. */
+export function describeScores(scores: Scores): string {
+  const parts = Object.entries(scores)
+    .filter(([, score]) => (score ?? 0) > 0)
+    .sort(([, a], [, b]) => (b ?? 0) - (a ?? 0))
+    .map(([reason, score]) => `${reason} ${Math.round((score ?? 0) * 100)}`);
+  return parts.length ? parts.join(', ') : 'none';
+}
 
 export type Outcome =
   | 'hidden'
@@ -102,7 +111,9 @@ export async function moderateInstagramComment(event: CommentEvent): Promise<Out
       if (!allowed) throw new RateLimitedError(`Comment check limit reached for user ${target.user_id}`);
     };
 
-    const { scores, language } = await classify(event.text, env.openaiApiKey(), env.openaiModel(), { beforeModel });
+    const { scores, language, source } = await classify(event.text, env.openaiApiKey(), env.openaiModel(), { beforeModel });
+    // Scores without the words, so "why wasn't this flagged?" can be answered from the logs.
+    console.info(`Checked ${event.commentId} (${source}, ${language ?? '?'}): ${describeScores(scores)}`);
     // The keyword blocklist and blocked users are paid features; saved lists wait for an upgrade.
     const decision = decide(event.text, event.authorUsername, scores, {
       ...filters,
@@ -148,7 +159,8 @@ export async function moderateInstagramComment(event: CommentEvent): Promise<Out
       .maybeSingle();
     if (logError) throw logError;
 
-    if (logged && profile?.notifications_enabled && profile.push_token) {
+    // One push per comment; 'daily' users get a summary instead (cron.ts), 'none' nothing.
+    if (logged && profile?.notifications_enabled && profile.notification_mode === 'each' && profile.push_token) {
       const result = await sendPush(profile.push_token, {
         title: `${deleting ? 'Deleted' : 'Hid'} a comment on ${target.handle}`,
         body: `From @${event.authorUsername}, flagged for ${REASON_LABEL[decision.reason]}. Tap to review.`,
@@ -194,11 +206,11 @@ async function loadFilters(userId: string): Promise<FilterSettings & { action: F
 async function loadProfile(userId: string) {
   const { data, error } = await db()
     .from('profiles')
-    .select('notifications_enabled, push_token')
+    .select('notifications_enabled, notification_mode, push_token')
     .eq('id', userId)
     .maybeSingle();
   if (error) throw error;
-  return data as { notifications_enabled: boolean; push_token: string | null } | null;
+  return data as { notifications_enabled: boolean; notification_mode: 'each' | 'daily' | 'none'; push_token: string | null } | null;
 }
 
 /** "Reel · Summer drop" for the log's "Posted on" row. */

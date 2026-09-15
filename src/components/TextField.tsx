@@ -30,17 +30,18 @@ export function TextField({ label, icon, isPassword, ...props }: Props) {
           borderWidth: 1.5,
           borderColor: focused ? colors.primary : 'transparent',
           paddingHorizontal: 14,
-          height: 52,
+          minHeight: 52,
           gap: 10,
         }}
       >
         {icon && <Ionicons name={icon} size={19} color={focused ? colors.primary : colors.textFaint} />}
         <TextInput
+          accessibilityLabel={label}
           placeholderTextColor={colors.textFaint}
           secureTextEntry={isPassword && hidden}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
-          style={{ flex: 1, color: colors.text, fontSize: font.size.md, height: '100%' }}
+          style={{ flex: 1, color: colors.text, fontSize: font.size.md, minHeight: 52, paddingVertical: 12 }}
           {...props}
         />
         {isPassword && (

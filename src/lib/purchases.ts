@@ -58,8 +58,8 @@ export async function purchasePlan(
   const pkg = packages.get(productId(plan, interval));
   if (!pkg) throw new Error('This plan isn’t available from the App Store right now. Please try again later.');
   try {
-    // Switching between Solo and Plus is the same call: Apple treats it as an upgrade or downgrade
-    // within the subscription group.
+    // Switching between Solo, Plus and Studio is the same call: Apple treats it as an upgrade or
+    // downgrade within the subscription group.
     await Purchases.purchasePackage(pkg);
   } catch (e: any) {
     if (e?.userCancelled) return { status: 'cancelled' };

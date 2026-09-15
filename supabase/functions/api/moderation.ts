@@ -31,14 +31,18 @@ const THRESHOLD: Record<Sensitivity, number> = { low: 0.85, medium: 0.6, high: 0
 
 // What happens to a flagged comment (Filters screen, filters.flagged_action):
 //   hide    every flagged comment is hidden (it can be restored)
-//   auto    the default: harassment the AI is at least 85% sure of is deleted, the rest is hidden
+//   auto    the default: anything toxic the AI is at least 80% sure of is deleted for good, so the
+//           user never has to read it; the rest is hidden. Spam is only ever hidden here: a wrong
+//           spam call (a friend's "link in bio") shouldn't be permanent.
 //   delete  every flagged comment is deleted
 export type FlaggedAction = 'hide' | 'auto' | 'delete';
-export const AUTO_DELETE_THRESHOLD = 0.85;
+// Was 0.85; lowered 2026-09-15 after "kia banchod baat hai" landed exactly on the line. Keep
+// AUTO_DELETE_PERCENT in src/data/plans.ts in step.
+export const AUTO_DELETE_THRESHOLD = 0.8;
 
 export function chooseAction(decision: Decision, mode: FlaggedAction): 'hide' | 'delete' {
   if (mode === 'delete') return 'delete';
-  if (mode === 'auto' && decision.reason === 'harassment' && !decision.byRule && decision.confidence >= AUTO_DELETE_THRESHOLD) {
+  if (mode === 'auto' && decision.reason !== 'spam' && !decision.byRule && decision.confidence >= AUTO_DELETE_THRESHOLD) {
     return 'delete';
   }
   return 'hide';

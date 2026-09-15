@@ -2,7 +2,12 @@
 //   deno test --allow-env --config supabase/functions/api/deno.json supabase/functions/tests
 import { assert, assertEquals, assertRejects, assertThrows } from '@std/assert';
 import { billingState, lookupKey, planOfPrice } from '../api/billing.ts';
-import { ClassifierError, classify, hasWords, isPlainEnglish, spamScore } from '../api/classifier.ts';
+import { ClassifierError, classify, hasKnownSlur, hasWords, isPlainEnglish, KNOWN_SLUR_SCORE, spamScore } from '../api/classifier.ts';
+import { describeScores } from '../api/pipeline.ts';
+import { requireConfirmation } from '../api/account.ts';
+import { ERASED, eraseSelection } from '../api/comments.ts';
+import { summaryMessage } from '../api/cron.ts';
+import { HttpError } from '../api/http.ts';
 import { safeEqual, seal, unseal, verifyHmacSha256 } from '../api/crypto.ts';
 import {
   authorizeUrl,
@@ -13,9 +18,11 @@ import {
   parseTime,
   polledCommentEvents,
   recentComments,
+  recentMediaWithComments,
   setCommentHidden,
 } from '../api/instagram.ts';
-import { chooseAction, containsTerm, decide, type FilterSettings } from '../api/moderation.ts';
+import { COOL_INTERVAL_MS, HOT_INTERVAL_MS, latestPostAt, pollDue } from '../api/poll.ts';
+import { AUTO_DELETE_THRESHOLD, chooseAction, containsTerm, decide, type FilterSettings } from '../api/moderation.ts';
 import { eventUsers, planOfProduct, storeBillingState } from '../api/store.ts';
 import {
   createCustomer,
@@ -148,6 +155,32 @@ Deno.test('classify: emoji, @mentions and obvious spam are settled by rules, no 
   } finally {
     stub.restore();
   }
+});
+
+Deno.test('classify: a known gaali is a slur by rule, scored above the auto-delete line, no API call', async () => {
+  const stub = stubFetch(() => new Response('should not be called', { status: 500 }));
+  try {
+    let beforeModelCalls = 0;
+    const beforeModel = () => Promise.resolve(void beforeModelCalls++);
+    const settled = { scores: { slurs: KNOWN_SLUR_SCORE, spam: 0 }, language: 'Roman Urdu/Hindi', source: 'rules' as const };
+    assertEquals(await classify('ghasti', 'sk-test', undefined, { beforeModel }), settled);
+    assertEquals(await classify('Tu ek RANDI hai 😂', 'sk-test', undefined, { beforeModel }), settled);
+    assertEquals(await classify('kia banchod baat hai', 'sk-test', undefined, { beforeModel }), settled);
+    assert(KNOWN_SLUR_SCORE >= AUTO_DELETE_THRESHOLD);
+    assertEquals(chooseAction(decide('ghasti', 'troll', settled.scores, FILTERS), 'auto'), 'delete');
+    assertEquals([stub.calls.length, beforeModelCalls], [0, 0]);
+    // Whole words only: no false hits inside other words.
+    assertEquals(hasKnownSlur('chutney recipe'), false);
+    assertEquals(hasKnownSlur('bhai ye kia khotapani hai xD'), false);
+    assertEquals(hasKnownSlur('CHUT'), true);
+  } finally {
+    stub.restore();
+  }
+});
+
+Deno.test('describeScores: strongest first, whole percentages, "none" when empty', () => {
+  assertEquals(describeScores({ harassment: 0.4, slurs: 0.95, spam: 0 }), 'slurs 95, harassment 40');
+  assertEquals(describeScores({}), 'none');
 });
 
 Deno.test('classify: plain English takes the free endpoint when it is sure either way', async () => {
@@ -301,6 +334,78 @@ Deno.test('polledCommentEvents: new, visible comments and replies by others, old
     { accountId: '1784', commentId: 'c3', text: 'newest', authorId: '99', authorUsername: 'fan', mediaId: 'm1', mediaType: 'REELS' },
     { accountId: '1784', commentId: 'r1', text: 'reply', authorId: '98', authorUsername: 'other', mediaId: 'm1', mediaType: 'REELS' },
   ]);
+});
+
+Deno.test('pollDue: never-read and hot accounts every run, cool ones every minute, backed-off ones not at all', () => {
+  const now = Date.UTC(2026, 8, 15, 12);
+  const ago = (ms: number) => new Date(now - ms).toISOString();
+  assertEquals(pollDue({ comments_polled_at: null, latest_post_at: null, poll_backoff_until: null }, now), true);
+  // Hot: a post 10 minutes old; read again after 30 seconds (with 5 seconds of slack), not after 20.
+  assertEquals(pollDue({ comments_polled_at: ago(26_000), latest_post_at: ago(10 * 60_000), poll_backoff_until: null }, now), true);
+  assertEquals(pollDue({ comments_polled_at: ago(20_000), latest_post_at: ago(10 * 60_000), poll_backoff_until: null }, now), false);
+  // Cool: newest post 3 hours old (or unknown); once a minute.
+  assertEquals(pollDue({ comments_polled_at: ago(30_000), latest_post_at: ago(3 * 60 * 60_000), poll_backoff_until: null }, now), false);
+  assertEquals(pollDue({ comments_polled_at: ago(56_000), latest_post_at: ago(3 * 60 * 60_000), poll_backoff_until: null }, now), true);
+  assertEquals(pollDue({ comments_polled_at: ago(30_000), latest_post_at: null, poll_backoff_until: null }, now), false);
+  // Backed off after a Meta rate limit, even if never read; due again once it passes.
+  assertEquals(pollDue({ comments_polled_at: null, latest_post_at: null, poll_backoff_until: new Date(now + 60_000).toISOString() }, now), false);
+  assertEquals(pollDue({ comments_polled_at: ago(90_000), latest_post_at: null, poll_backoff_until: ago(1) }, now), true);
+  assertEquals([HOT_INTERVAL_MS, COOL_INTERVAL_MS], [30_000, 60_000]);
+});
+
+Deno.test('latestPostAt: the newest media timestamp, Instagram offsets included; null without one', () => {
+  assertEquals(latestPostAt([{ timestamp: '2026-09-14T10:00:00+0000' }, { timestamp: '2026-09-15T15:00:00+0500' }, {}]), '2026-09-15T10:00:00.000Z');
+  assertEquals(latestPostAt([{}]), null);
+  assertEquals(latestPostAt([]), null);
+});
+
+Deno.test('recentMediaWithComments: one request for the newest posts and their first page of comments', async () => {
+  const stub = stubFetch(() =>
+    Response.json({
+      data: [{ id: 'm1', media_product_type: 'FEED', timestamp: '2026-09-15T09:00:00+0000', comments: { data: [{ id: 'c1', text: 'hi', timestamp: '2026-09-15T09:05:00+0000' }] } }],
+    })
+  );
+  try {
+    const media = await recentMediaWithComments('tok', 5);
+    assertEquals(media[0].comments?.data?.[0].id, 'c1');
+    assertEquals(stub.calls.length, 1);
+    const url = stub.calls[0].url;
+    assertEquals([url.pathname, url.searchParams.get('limit')], ['/v23.0/me/media', '5']);
+    assertEquals(
+      url.searchParams.get('fields'),
+      'id,media_product_type,timestamp,comments.limit(50){id,text,timestamp,hidden,from,username,replies{id,text,timestamp,hidden,from,username}}'
+    );
+  } finally {
+    stub.restore();
+  }
+});
+
+Deno.test('recentComments: a page already in hand is used first, and only older pages are fetched', async () => {
+  const since = Date.UTC(2026, 8, 14, 10);
+  const c = (id: string, minutes: number) => ({ id, text: id, timestamp: new Date(since + minutes * 60_000).toISOString() });
+  const stub = stubFetch(() => Response.json({ data: [c('c2', 1), c('c1', -5)] }));
+  try {
+    // Everything on the first page is newer than the cursor and there is a next page: one fetch.
+    const more = await recentComments('m1', 'tok', since, { data: [c('c4', 9), c('c3', 5)], paging: { next: 'https://graph.instagram.com/v23.0/m1/comments?after=p2' } });
+    assertEquals(more.map((x) => x.id), ['c4', 'c3', 'c2', 'c1']);
+    assertEquals(stub.calls.length, 1);
+    // The first page already reaches past the cursor: no fetch at all.
+    const done = await recentComments('m1', 'tok', since, { data: [c('c4', 9), c('c0', -1)], paging: { next: 'https://graph.instagram.com/v23.0/m1/comments?after=p2' } });
+    assertEquals(done.map((x) => x.id), ['c4', 'c0']);
+    assertEquals(stub.calls.length, 1);
+    // No comments at all on the post.
+    assertEquals(await recentComments('m1', 'tok', since, { data: [] }), []);
+    assertEquals(stub.calls.length, 1);
+  } finally {
+    stub.restore();
+  }
+});
+
+Deno.test('InstagramError.rateLimited: Meta throttle codes and 429', () => {
+  assertEquals(new InstagramError(400, 'x', 4).rateLimited, true);
+  assertEquals(new InstagramError(400, 'x', 17).rateLimited, true);
+  assertEquals(new InstagramError(429, 'x').rateLimited, true);
+  assertEquals(new InstagramError(400, 'x', 190).rateLimited, false);
 });
 
 Deno.test('recentComments: pages newest first and stops at the cursor', async () => {
@@ -526,6 +631,7 @@ Deno.test('billingState: Stripe statuses as the app sees them', () => {
 
 Deno.test('planOfProduct reads toxoff App Store (and Play) product ids only', () => {
   assertEquals(planOfProduct('toxoff_plus_annual'), { plan: 'plus', interval: 'annual' });
+  assertEquals(planOfProduct('toxoff_studio_monthly'), { plan: 'studio', interval: 'monthly' });
   assertEquals(planOfProduct('toxoff_solo_monthly:base'), { plan: 'solo', interval: 'monthly' });
   assertEquals(planOfProduct('toxoff_gold_monthly'), null);
   assertEquals(planOfProduct('com.other.app.monthly'), null);
@@ -551,6 +657,7 @@ Deno.test('storeBillingState: App Store subscriptions as the app sees them', () 
   assertEquals(storeBillingState({ toxoff_plus_monthly: { expires_date: at(-10), grace_period_expires_date: at(-4), billing_issues_detected_at: at(-12) } }, now).status, 'none');
   // Overlap while switching plans: Plus wins over Solo, then the one running longest.
   assertEquals(storeBillingState({ toxoff_solo_annual: { expires_date: at(300) }, toxoff_plus_monthly: { expires_date: at(30) } }, now).plan, 'plus');
+  assertEquals(storeBillingState({ toxoff_plus_annual: { expires_date: at(300) }, toxoff_studio_monthly: { expires_date: at(30) } }, now).plan, 'studio');
   assertEquals(storeBillingState({ toxoff_solo_monthly: { expires_date: at(3) }, toxoff_solo_annual: { expires_date: at(300) } }, now).interval, 'annual');
 });
 
@@ -595,13 +702,42 @@ Deno.test("deleteComment: DELETE on the comment, errors like hiding", async () =
   }
 });
 
-Deno.test('chooseAction: auto deletes only AI-scored harassment at 85%+, hide/delete apply to all', () => {
-  const ai = (reason: 'harassment' | 'hate_speech' | 'spam', confidence: number) => ({ remove: true, reason, confidence } as const);
-  assertEquals(chooseAction(ai('harassment', 0.85), 'auto'), 'delete');
+Deno.test('eraseSelection: all deleted comments by default, else a list of ids; erased rows keep no words', () => {
+  const id = '0b8d1e6e-4c1b-4f5a-9d3e-2a7c6b1f0e11';
+  assertEquals(eraseSelection({}), null);
+  assertEquals(eraseSelection({ commentIds: [id] }), [id]);
+  assertEquals(assertThrows(() => eraseSelection({ commentIds: [] }), HttpError).status, 400);
+  assertEquals(assertThrows(() => eraseSelection({ commentIds: 'all' }), HttpError).status, 400);
+  assertEquals(assertThrows(() => eraseSelection({ commentIds: [id, 'not-a-uuid'] }), HttpError).status, 404);
+  assertEquals(assertThrows(() => eraseSelection({ commentIds: Array(501).fill(id) }), HttpError).status, 400);
+  assertEquals(ERASED, { text: '', username: '', language: null, post_ref: null });
+});
+
+Deno.test('requireConfirmation: account deletion needs an explicit confirm: true', () => {
+  requireConfirmation({ confirm: true });
+  assertEquals(assertThrows(() => requireConfirmation({}), HttpError).status, 400);
+  assertEquals(assertThrows(() => requireConfirmation({ confirm: 'yes' }), HttpError).status, 400);
+  assertEquals(assertThrows(() => requireConfirmation({ confirm: 1 }), HttpError).status, 400);
+});
+
+Deno.test('summaryMessage: counts read naturally and open the Log', () => {
+  assertEquals(summaryMessage(1).body, '1 toxic comment was removed in the last 24 hours. You didn’t have to see it.');
+  assertEquals(summaryMessage(12).body, '12 toxic comments were removed in the last 24 hours. You didn’t have to see them.');
+  assertEquals(summaryMessage(3).data, { screen: 'log' });
+});
+
+Deno.test('chooseAction: auto deletes AI-scored toxicity at 80%+ (never spam), hide/delete apply to all', () => {
+  const ai = (reason: 'harassment' | 'hate_speech' | 'slurs' | 'toxicity' | 'spam', confidence: number) =>
+    ({ remove: true, reason, confidence }) as const;
+  assertEquals(AUTO_DELETE_THRESHOLD, 0.8);
+  assertEquals(chooseAction(ai('harassment', 0.8), 'auto'), 'delete');
   assertEquals(chooseAction(ai('harassment', 0.98), 'auto'), 'delete');
-  assertEquals(chooseAction(ai('harassment', 0.84), 'auto'), 'hide');
-  assertEquals(chooseAction(ai('hate_speech', 0.99), 'auto'), 'hide');
-  assertEquals(chooseAction(ai('spam', 0.99), 'auto'), 'hide');
+  assertEquals(chooseAction(ai('harassment', 0.79), 'auto'), 'hide');
+  assertEquals(chooseAction(ai('hate_speech', 0.99), 'auto'), 'delete');
+  assertEquals(chooseAction(ai('slurs', 0.9), 'auto'), 'delete');
+  assertEquals(chooseAction(ai('toxicity', 0.8), 'auto'), 'delete');
+  assertEquals(chooseAction(ai('toxicity', 0.7), 'auto'), 'hide');
+  assertEquals(chooseAction(ai('spam', 0.99), 'auto'), 'hide'); // a wrong spam call must stay reversible
   // A blocked user scores harassment at 100% by rule, not by the AI: hidden in auto mode.
   assertEquals(chooseAction({ remove: true, reason: 'harassment', confidence: 1, byRule: true }, 'auto'), 'hide');
   assertEquals(chooseAction(ai('harassment', 0.99), 'hide'), 'hide');

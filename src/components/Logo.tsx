@@ -1,7 +1,9 @@
-import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
-import { Text, View } from 'react-native';
+import { Image, Text, View } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
+
+// The app icon itself (assets/icon.png), rounded the way iOS rounds it.
+const ICON = require('../../assets/icon.png');
 
 export function LogoMark({ size = 56 }: { size?: number }) {
   const { colors } = useTheme();
@@ -10,18 +12,17 @@ export function LogoMark({ size = 56 }: { size?: number }) {
       style={{
         width: size,
         height: size,
-        borderRadius: size / 3,
-        backgroundColor: colors.primary,
-        alignItems: 'center',
-        justifyContent: 'center',
-        shadowColor: colors.primary,
+        borderRadius: size * 0.22,
+        overflow: 'hidden',
+        backgroundColor: colors.primaryDark,
+        shadowColor: colors.primaryDark,
         shadowOpacity: 0.35,
         shadowRadius: 14,
         shadowOffset: { width: 0, height: 6 },
         elevation: 6,
       }}
     >
-      <Ionicons name="shield-checkmark" size={size * 0.55} color="#FFFFFF" />
+      <Image source={ICON} style={{ width: size, height: size }} accessibilityLabel="toxoff" />
     </View>
   );
 }

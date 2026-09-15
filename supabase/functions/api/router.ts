@@ -1,7 +1,8 @@
 import { billingReturn, cancel, portal, receiveStripeWebhook, subscribe, sync } from './billing.ts';
-import { restoreComment } from './comments.ts';
+import { deleteAccount } from './account.ts';
+import { eraseDeletedComments, restoreComment } from './comments.ts';
 import { finishConnect, instagramCallback, startConnect } from './connect.ts';
-import { refreshTokens } from './cron.ts';
+import { dailySummary, refreshTokens } from './cron.ts';
 import { HttpError, json } from './http.ts';
 import { pollComments } from './poll.ts';
 import { receiveRevenueCatWebhook, syncAppStore } from './store.ts';
@@ -23,6 +24,10 @@ export async function handle(req: Request): Promise<Response> {
         return await finishConnect(req);
       case 'POST /comments/restore':
         return await restoreComment(req);
+      case 'POST /comments/erase-deleted':
+        return await eraseDeletedComments(req);
+      case 'POST /account/delete':
+        return await deleteAccount(req);
       case 'GET /webhooks/instagram':
         return verifyInstagramSubscription(url);
       case 'POST /webhooks/instagram':
@@ -31,6 +36,8 @@ export async function handle(req: Request): Promise<Response> {
         return await refreshTokens(req);
       case 'POST /cron/poll-comments':
         return await pollComments(req);
+      case 'POST /cron/daily-summary':
+        return await dailySummary(req);
       case 'POST /billing/subscribe':
         return await subscribe(req);
       case 'POST /billing/sync':

@@ -1,0 +1,83 @@
+/* toxoff website. Same palette as the app (src/theme/colors.ts): deep forest green from the icon. */
+:root {
+  --forest: #13433b;
+  --forest-mid: #14574b;
+  --forest-soft: #e4f1ec;
+  --mint: #4cbfa6;
+  --lavender: #e0e0f8;
+  --bg: #ffffff;
+  --surface: #f3f7f5;
+  --border: #e6ece9;
+  --text: #15201c;
+  --muted: #66736e;
+  --faint: #9da8a3;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --forest-mid: #4cbfa6;
+    --forest-soft: #15312b;
+    --bg: #0c1210;
+    --surface: #151e1b;
+    --border: #25312d;
+    --text: #f2f6f4;
+    --muted: #98a6a1;
+    --faint: #5f6c67;
+  }
+}
+* { box-sizing: border-box; }
+html { color-scheme: light dark; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 17px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: var(--forest-mid); text-decoration: none; }
+a:hover { text-decoration: underline; }
+.wrap { max-width: 720px; margin: 0 auto; padding: 24px 20px 64px; }
+header.site {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  padding: 8px 0 24px;
+}
+header.site .brand { display: flex; align-items: center; gap: 10px; color: var(--text); font-weight: 800; font-size: 22px; letter-spacing: -0.3px; }
+header.site .brand img { width: 36px; height: 36px; border-radius: 9px; }
+header.site .brand b { color: var(--forest-mid); font-weight: 800; }
+header.site nav { display: flex; gap: 18px; font-size: 15px; font-weight: 600; flex-wrap: wrap; justify-content: flex-end; }
+header.site nav a { color: var(--muted); }
+header.site nav a:hover, header.site nav a[aria-current] { color: var(--forest-mid); }
+
+.hero { text-align: center; padding: 40px 0 24px; }
+.hero img { width: 112px; height: 112px; border-radius: 26px; box-shadow: 0 10px 30px rgba(19, 67, 59, 0.28); }
+.hero h1 { font-size: 40px; line-height: 1.15; letter-spacing: -0.8px; margin: 26px 0 12px; }
+.hero h1 b { color: var(--forest-mid); font-weight: 800; }
+.hero p.lead { color: var(--muted); font-size: 19px; max-width: 520px; margin: 0 auto; }
+.cta { display: inline-flex; align-items: center; gap: 8px; margin-top: 26px; padding: 14px 22px; border-radius: 999px;
+  background: var(--forest-mid); color: #fff; font-weight: 700; }
+.cta:hover { text-decoration: none; filter: brightness(1.08); }
+.cta.soft { background: var(--forest-soft); color: var(--forest-mid); }
+.note { color: var(--faint); font-size: 14px; margin-top: 12px; }
+
+.features { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; margin: 36px 0 12px; }
+.feature { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 18px; }
+.feature .icon { width: 38px; height: 38px; border-radius: 12px; background: var(--forest-soft); color: var(--forest-mid);
+  display: flex; align-items: center; justify-content: center; font-size: 20px; margin-bottom: 12px; }
+.feature h3 { margin: 0 0 6px; font-size: 17px; }
+.feature p { margin: 0; color: var(--muted); font-size: 15px; }
+
+article h1 { font-size: 32px; letter-spacing: -0.5px; line-height: 1.2; margin: 8px 0 6px; }
+article .effective { color: var(--faint); font-size: 14px; margin: 0 0 28px; }
+article h2 { font-size: 20px; margin: 34px 0 10px; }
+article h3 { font-size: 17px; margin: 22px 0 6px; }
+article p, article li { color: var(--text); }
+article ul { padding-left: 22px; }
+article li { margin: 6px 0; }
+article .box { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 16px 18px; margin: 18px 0; }
+article .box p:first-child { margin-top: 0; }
+article .box p:last-child { margin-bottom: 0; }
+code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.92em; background: var(--surface); padding: 1px 5px; border-radius: 5px; }
+
+footer.site { border-top: 1px solid var(--border); margin-top: 48px; padding-top: 20px; color: var(--faint); font-size: 14px;
+  display: flex; flex-wrap: wrap; gap: 8px 18px; justify-content: space-between; }
+footer.site nav { display: flex; gap: 16px; flex-wrap: wrap; }
+footer.site a { color: var(--muted); }

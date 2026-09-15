@@ -5,10 +5,12 @@ import { useAuth } from '../src/context/AuthContext';
 import { useTheme } from '../src/theme/ThemeContext';
 
 export default function Index() {
-  const { user, loading } = useAuth();
+  const { user, loading, onboarded, passwordRecovery } = useAuth();
   const { colors } = useTheme();
+  if (passwordRecovery !== 'idle') return <Redirect href="/(auth)/reset-password" />;
 
-  if (loading) {
+  // Signed in but the profile hasn't loaded yet: wait, so a new user isn't shown the tabs first.
+  if (loading || (user && onboarded === null)) {
     return (
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background }}>
         <ActivityIndicator color={colors.primary} />
@@ -16,5 +18,5 @@ export default function Index() {
     );
   }
 
-  return <Redirect href={user ? '/(tabs)' : '/splash'} />;
+  return <Redirect href={!user ? '/splash' : onboarded === false ? '/onboarding' : '/(tabs)'} />;
 }

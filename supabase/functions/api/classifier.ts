@@ -7,11 +7,14 @@ import type { ModerationReason, Scores } from './moderation.ts';
 // To switch to another provider, replace modelScores(); the rest of the pipeline only sees Scores.
 //
 // Cheap answers come first, so the model only sees comments that need it:
-//   1. rules       nothing to read (emoji, @mentions, numbers) or obvious spam: no API call
+//   1. rules       nothing to read (emoji, @mentions, numbers), obvious spam, or a known slur
+//                  (KNOWN_SLURS, the gaali the model scores unevenly): no API call
 //   2. moderation  plain English, every word a common one: the free endpoint, and if it is
 //                  confidently clean or confidently abusive that's the answer
 //   3. model       everything else: other languages and scripts, slang and names the endpoint may
 //                  misread, and the grey zone in between
+
+import { containsTerm } from './moderation.ts';
 
 export class ClassifierError extends Error {}
 
@@ -30,6 +33,8 @@ export const OBVIOUS_SPAM = 0.7;
 /** Pre-filter: the moderation endpoint's verdict stands outside this band; inside it, the model decides. */
 export const CLEAN_BELOW = 0.1;
 export const ABUSIVE_FROM = 0.9;
+/** A known slur scores this, so it is deleted under the default "auto" action (0.8). */
+export const KNOWN_SLUR_SCORE = 0.95;
 
 const SYSTEM_PROMPT = `You score Instagram comments for a creator who wants toxic comments removed. Comments may be in any language or script, including Roman Urdu, Hindi, Punjabi, Arabic, and mixed languages. Read them as a native speaker would, including slang and abuse.
 Score each category from 0 to 100 (how sure you are the comment is that thing):
@@ -38,7 +43,27 @@ Score each category from 0 to 100 (how sure you are the comment is that thing):
 - slurs: explicit slurs or profane insults (e.g. gaali in Urdu/Hindi), even when joking
 - spam: scams, promotions, "DM me", follower selling, links, repeated tagging
 - self_harm: encouraging self-harm or suicide (e.g. "kys")
+South Asian gaali are slurs however they are spelled and whatever the tone: words like ghasti/gashti, randi, kanjar/kanjri, bhenchod, madarchod, chutiya, gandu, lund, bhosdike, harami score 90 or more on slurs. A comment that is only a gaali, with nothing else, is the strongest case.
 Friendly banter, criticism of the content, disagreement, and compliments score low. Answer only with JSON.`;
+
+// Gaali (Roman Urdu / Hindi / Punjabi slurs) the model scores unevenly: "ghasti" alone came back 45.
+// Whole-word matches (containsTerm) so "chut" doesn't hit "chutney". Spelling variants are listed
+// because Roman script has no fixed spelling; the model's prompt covers the ones this list misses.
+export const KNOWN_SLURS = [
+  'ghasti', 'gashti', 'gasti', 'ghashti', 'gashtiyan',
+  'randi', 'rundi', 'raandi', 'randiyan',
+  'kanjar', 'kanjri', 'kanjari',
+  'chutiya', 'chutiye', 'chutia', 'chutiyo', 'chut', 'choot',
+  'gandu', 'gaandu', 'gand', 'gaand',
+  'bhenchod', 'behenchod', 'benchod', 'banchod', 'bhanchod', 'behnchod', 'bhen chod', 'behen chod', 'bhen di',
+  'madarchod', 'maderchod', 'madarjaat', 'maa chod', 'motherchod',
+  'bhosdike', 'bhosdi', 'bhosda', 'bsdk', 'bkl', 'mkc',
+  'lund', 'lawda', 'lawde', 'lauda', 'laude', 'lavda', 'lavde', 'lodu', 'loda', 'lode',
+  'harami', 'haramzada', 'haramzadi', 'haramzade', 'haramkhor',
+  'kutti', 'kuttiya', 'kutiya',
+  'bhadwa', 'bhadwe', 'dalla', 'dalle',
+  'chinal', 'chhinal',
+];
 
 const CATEGORIES = ['harassment', 'hate_speech', 'slurs', 'spam', 'self_harm'] as const;
 
@@ -60,8 +85,9 @@ export async function classify(
 ): Promise<Classification> {
   const spam = spamScore(text);
 
-  // 1. Rules: nothing to read, or spam by two or more signals.
+  // 1. Rules: nothing to read, spam by two or more signals, or a known slur.
   if (!hasWords(text) || spam >= OBVIOUS_SPAM) return { scores: { spam }, language: null, source: 'rules' };
+  if (hasKnownSlur(text)) return { scores: { slurs: KNOWN_SLUR_SCORE, spam }, language: 'Roman Urdu/Hindi', source: 'rules' };
 
   // 2. Plain English: the free endpoint reads it well. A clear answer is final; the grey zone goes on.
   let moderation: Scores | null = null;
@@ -97,6 +123,11 @@ function withSpam(result: Classification, spam: number): Classification {
 }
 
 // ---------- pre-filter helpers ----------
+
+/** True when the comment contains one of KNOWN_SLURS as a whole word, in any case. */
+export function hasKnownSlur(text: string): boolean {
+  return KNOWN_SLURS.some((slur) => containsTerm(text, slur));
+}
 
 /** True when the comment has letters to read once @mentions are set aside; emoji and numbers alone don't count. */
 export function hasWords(text: string): boolean {

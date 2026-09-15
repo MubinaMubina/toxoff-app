@@ -25,7 +25,7 @@ import {
 } from '../../src/components/ui';
 import { useAuth } from '../../src/context/AuthContext';
 import { useModeration } from '../../src/context/ModerationContext';
-import { getPlan, PAID_PLANS } from '../../src/data/plans';
+import { AUTO_DELETE_PERCENT, getPlan, PAID_PLANS } from '../../src/data/plans';
 import { useTheme } from '../../src/theme/ThemeContext';
 import { CategoryKey, FlaggedAction, Plan, Sensitivity } from '../../src/types';
 
@@ -43,10 +43,16 @@ const CATEGORIES: { key: CategoryKey; label: string; desc: string; icon: keyof t
 ];
 
 const ACTION_HINT: Record<FlaggedAction, string> = {
-  hide: 'Every flagged comment is hidden. Hidden comments disappear for everyone except the commenter, and you can restore them from the Log.',
-  auto: 'Harassment the AI is at least 85% sure of is deleted for good. Everything else is hidden, so you can restore it from the Log.',
-  delete: 'Every flagged comment is deleted from Instagram for good. They stay in your Log but can’t be restored.',
+  hide: 'Hide flagged comments on Instagram. You can restore them from the Log.',
+  auto: `Permanently delete toxic comments when the AI is at least ${AUTO_DELETE_PERCENT}% confident. Hide the rest, including spam.`,
+  delete: 'Permanently delete every flagged comment, including spam. Deleted comments cannot be restored.',
 };
+
+const ACTION_OPTIONS: { value: FlaggedAction; label: string; note: string }[] = [
+  { value: 'hide', label: 'Hide comments', note: 'Can be restored' },
+  { value: 'auto', label: 'Delete clear abuse', note: `Permanent above ${AUTO_DELETE_PERCENT}% confidence · Recommended` },
+  { value: 'delete', label: 'Delete all flagged comments', note: 'Permanent for every flagged comment' },
+];
 
 const SENSITIVITY_HINT: Record<Sensitivity, string> = {
   low: 'Only removes clearly toxic comments. Fewest false positives.',
@@ -69,19 +75,21 @@ export default function Filters() {
     removeBlockedUser,
   } = useModeration();
 
-  // Deleting can't be undone, so switching to it asks first.
+  // Both deletion modes can permanently remove comments, so each requires an explicit choice.
   const chooseAction = (action: FlaggedAction) => {
     if (action === filters.flaggedAction) return;
-    if (action !== 'delete') {
+    if (action === 'hide') {
       setFlaggedAction(action);
       return;
     }
     Alert.alert(
-      'Delete every flagged comment?',
-      'toxoff will delete all flagged comments from Instagram for everyone, not just clear harassment. Deleted comments can’t be restored, even if the AI got one wrong.',
+      action === 'auto' ? 'Permanently delete clear abuse?' : 'Permanently delete every flagged comment?',
+      action === 'auto'
+        ? `toxoff will permanently delete toxic comments when the AI is at least ${AUTO_DELETE_PERCENT}% confident. Spam and lower-confidence comments will be hidden. Deleted comments cannot be restored, even if the AI makes a mistake.`
+        : 'toxoff will permanently delete every flagged comment from Instagram, including spam and borderline comments. Deleted comments cannot be restored, even if the AI makes a mistake.',
       [
-        { text: 'Keep hiding', style: 'cancel' },
-        { text: 'Delete them', style: 'destructive', onPress: () => setFlaggedAction('delete') },
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Enable permanent deletion', style: 'destructive', onPress: () => setFlaggedAction(action) },
       ]
     );
   };
@@ -128,18 +136,34 @@ export default function Filters() {
           {/* What happens to a flagged comment */}
           <View style={{ marginTop: spacing.xl }}>
             <SectionLabel>When a comment is flagged</SectionLabel>
-            <Segmented<FlaggedAction>
-              value={filters.flaggedAction}
-              onChange={chooseAction}
-              options={[
-                { label: 'Hide all', value: 'hide' },
-                { label: 'Auto', value: 'auto' },
-                { label: 'Delete all', value: 'delete' },
-              ]}
-            />
-            <Text style={{ color: colors.textMuted, fontSize: font.size.sm, marginTop: 10, lineHeight: 19 }}>
-              {ACTION_HINT[filters.flaggedAction]}
-            </Text>
+            <View accessibilityRole="radiogroup" style={{ gap: 10 }}>
+              {ACTION_OPTIONS.map((option) => {
+                const selected = option.value === filters.flaggedAction;
+                return (
+                  <Pressable
+                    key={option.value}
+                    accessibilityRole="radio"
+                    accessibilityState={{ checked: selected }}
+                    accessibilityLabel={`${option.label}. ${option.note}. ${ACTION_HINT[option.value]}`}
+                    accessibilityHint={option.value === 'hide' ? 'Switch to reversible hiding' : 'Opens a confirmation before enabling permanent deletion'}
+                    onPress={() => chooseAction(option.value)}
+                    style={({ pressed }) => ({
+                      flexDirection: 'row', gap: 12, padding: 16, borderRadius: radius.lg,
+                      backgroundColor: selected ? colors.primarySoft : colors.card,
+                      borderWidth: 1.5, borderColor: selected ? colors.primary : colors.border,
+                      opacity: pressed ? 0.8 : 1,
+                    })}
+                  >
+                    <Ionicons name={selected ? 'checkmark-circle' : 'ellipse-outline'} color={selected ? colors.primary : colors.textMuted} size={22} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ color: colors.text, fontSize: font.size.md, fontWeight: font.weight.semibold }}>{option.label}</Text>
+                      <Text style={{ color: option.value === 'auto' ? colors.primary : colors.textMuted, fontSize: font.size.sm, marginTop: 3 }}>{option.note}</Text>
+                      {selected && <Text style={{ color: colors.textMuted, fontSize: font.size.sm, lineHeight: 19, marginTop: 8 }}>{ACTION_HINT[option.value]}</Text>}
+                    </View>
+                  </Pressable>
+                );
+              })}
+            </View>
           </View>
 
           {/* Categories */}
@@ -181,6 +205,8 @@ export default function Filters() {
                       </Text>
                     </View>
                     <Switch
+                      accessibilityLabel={`${c.label} protection`}
+                      accessibilityHint={c.desc}
                       value={filters.categories[c.key]}
                       onValueChange={() => {
                         Haptics.selectionAsync().catch(() => {});
@@ -215,11 +241,13 @@ export default function Filters() {
                       backgroundColor: colors.surfaceAlt,
                       borderRadius: radius.md,
                       paddingHorizontal: 14,
-                      height: 50,
+                      minHeight: 50,
+                      paddingVertical: 10,
                       justifyContent: 'center',
                     }}
                   >
                     <TextInput
+                      accessibilityLabel="Keyword to block"
                       value={keyword}
                       onChangeText={setKeyword}
                       onSubmitEditing={submitKeyword}
@@ -230,7 +258,7 @@ export default function Filters() {
                       style={{ color: colors.text, fontSize: font.size.md }}
                     />
                   </View>
-                  <AddButton onPress={submitKeyword} />
+                  <AddButton label="Add blocked keyword" onPress={submitKeyword} />
                 </View>
                 <ChipList
                   items={filters.keywords}
@@ -263,11 +291,13 @@ export default function Filters() {
                       backgroundColor: colors.surfaceAlt,
                       borderRadius: radius.md,
                       paddingHorizontal: 14,
-                      height: 50,
+                      minHeight: 50,
+                      paddingVertical: 10,
                     }}
                   >
                     <Text style={{ color: colors.textFaint, fontSize: font.size.md }}>@</Text>
                     <TextInput
+                      accessibilityLabel="Username to block"
                       value={blockedUser}
                       onChangeText={setBlockedUser}
                       onSubmitEditing={submitUser}
@@ -278,7 +308,7 @@ export default function Filters() {
                       style={{ color: colors.text, fontSize: font.size.md, flex: 1, marginLeft: 2 }}
                     />
                   </View>
-                  <AddButton onPress={submitUser} />
+                  <AddButton label="Add blocked user" onPress={submitUser} />
                 </View>
                 <ChipList
                   items={filters.blockedUsers.map((u) => `@${u}`)}
@@ -309,7 +339,7 @@ function LockedFeature({
 }) {
   const { colors, font } = useTheme();
   return (
-    <Pressable onPress={onUpgrade}>
+    <Pressable accessibilityRole="button" accessibilityLabel={`${description} Available on ${availableOn}. Upgrade to unlock.`} onPress={onUpgrade}>
       {/* Icon on the first line of text, action under the text: reads top to bottom at any length. */}
       <Card style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 12 }}>
         <Ionicons name="lock-closed" size={18} color={colors.primary} style={{ marginTop: 1 }} />
@@ -336,10 +366,12 @@ function LockedFeature({
   );
 }
 
-function AddButton({ onPress }: { onPress: () => void }) {
+function AddButton({ label, onPress }: { label: string; onPress: () => void }) {
   const { colors, radius } = useTheme();
   return (
     <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
       onPress={() => {
         Haptics.selectionAsync().catch(() => {});
         onPress();
@@ -353,7 +385,7 @@ function AddButton({ onPress }: { onPress: () => void }) {
         justifyContent: 'center',
       }}
     >
-      <Ionicons name="add" size={26} color="#fff" />
+      <Ionicons name="add" size={26} color={colors.onPrimary} />
     </Pressable>
   );
 }
@@ -370,7 +402,7 @@ function ChipList({
   const { colors, font, radius } = useTheme();
   if (items.length === 0) {
     return (
-      <Text style={{ color: colors.textFaint, fontSize: font.size.sm, marginTop: 12 }}>{empty}</Text>
+      <Text style={{ color: colors.textMuted, fontSize: font.size.sm, marginTop: 12 }}>{empty}</Text>
     );
   }
   return (

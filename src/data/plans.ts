@@ -3,6 +3,13 @@ import { PaidPlanId, Plan, PlanId } from '../types';
 // Pricing lives in src/data/pricing.ts (location-based). Plans here describe the
 // feature set / limits; the region decides the actual price + currency.
 // Limits are mirrored server-side in public.plan_limits (supabase/migrations).
+export const PAID_PLAN_COMMON_FEATURES = [
+  'Unlimited comments moderated',
+  '100+ languages',
+  'All toxicity categories',
+  'Custom keyword blocklist',
+];
+
 export const PLANS: Plan[] = [
   {
     id: 'free',
@@ -12,7 +19,7 @@ export const PLANS: Plan[] = [
     blockedUsers: false,
     tagline: 'Try toxoff on one account',
     features: [
-      '1 connected account (Instagram or TikTok)',
+      '1 Instagram account',
       '20 free comment checks (shared with your trial)',
       '5 more for each friend you invite (up to 3)',
       '100+ languages',
@@ -25,13 +32,10 @@ export const PLANS: Plan[] = [
     maxAccounts: 1,
     keywordBlocklist: true,
     blockedUsers: false,
-    tagline: 'For one creator, one platform',
+    tagline: 'For one creator',
     features: [
-      '1 connected account (Instagram or TikTok)',
-      'Unlimited comments moderated',
-      '100+ languages',
-      'All toxicity categories',
-      'Custom keyword blocklist',
+      '1 Instagram account',
+      ...PAID_PLAN_COMMON_FEATURES,
     ],
   },
   {
@@ -43,11 +47,23 @@ export const PLANS: Plan[] = [
     popular: true,
     tagline: 'For creators running multiple accounts',
     features: [
-      'Up to 5 accounts across Instagram + TikTok',
-      'Unlimited comments moderated',
-      '100+ languages',
-      'All toxicity categories + custom rules',
-      'Custom keyword blocklist & blocked users',
+      'Up to 5 Instagram accounts',
+      ...PAID_PLAN_COMMON_FEATURES,
+      'Blocked users list',
+      'Priority support',
+    ],
+  },
+  {
+    id: 'studio',
+    name: 'Studio',
+    maxAccounts: 15,
+    keywordBlocklist: true,
+    blockedUsers: true,
+    tagline: 'For managers and small agencies',
+    features: [
+      'Up to 15 Instagram accounts',
+      ...PAID_PLAN_COMMON_FEATURES,
+      'Blocked users list',
       'Priority support',
     ],
   },
@@ -63,6 +79,10 @@ export function getPlan(id: PlanId): Plan {
 
 // Must match the trial length in handle_new_user() (supabase/migrations).
 export const TRIAL_DAYS = 7;
+
+// Hiding is the default. In the optional auto mode, toxic comments at this confidence are deleted for good.
+// Must match AUTO_DELETE_THRESHOLD in supabase/functions/api/moderation.ts.
+export const AUTO_DELETE_PERCENT = 80;
 
 // Comments an account can have checked without paying, across its trial and the Free
 // plan combined. Never resets. Must match consume_comment_check() (supabase/migrations).

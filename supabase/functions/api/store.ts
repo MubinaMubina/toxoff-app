@@ -13,8 +13,11 @@ import { HttpError, json, text } from './http.ts';
 const API = 'https://api.revenuecat.com/v1';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-type Plan = 'solo' | 'plus';
+type Plan = 'solo' | 'plus' | 'studio';
 type Interval = 'monthly' | 'annual';
+
+// Bigger plan first when two subscriptions overlap during a switch.
+const PLAN_RANK: Record<Plan, number> = { solo: 1, plus: 2, studio: 3 };
 
 // One RevenueCat subscription (subscriber.subscriptions[productId] in the REST API v1).
 export type StoreSubscription = {
@@ -37,10 +40,10 @@ export type StoreBilling = {
 
 const NONE: StoreBilling = { status: 'none', plan: null, interval: null, periodEnd: null, cancelAtPeriodEnd: false };
 
-/** App Store product ids: toxoff_solo_monthly, toxoff_solo_annual, toxoff_plus_monthly, toxoff_plus_annual. */
+/** App Store product ids: toxoff_<plan>_<interval>, e.g. toxoff_solo_monthly, toxoff_studio_annual. */
 export function planOfProduct(productId: string): { plan: Plan; interval: Interval } | null {
   // Google Play ids look like "toxoff_plus_monthly:base"; only the part before the colon counts.
-  const match = productId.split(':')[0].match(/^toxoff_(solo|plus)_(monthly|annual)$/);
+  const match = productId.split(':')[0].match(/^toxoff_(solo|plus|studio)_(monthly|annual)$/);
   return match ? { plan: match[1] as Plan, interval: match[2] as Interval } : null;
 }
 
@@ -49,7 +52,7 @@ const time = (iso: string | null | undefined) => (iso ? Date.parse(iso) : 0);
 /**
  * What the user's App Store subscriptions mean for the app. Counts while it's paid up or in
  * Apple's billing grace period (past_due: Apple is retrying the card). Refunded ones don't count.
- * If two overlap (a plan switch), Plus wins, then the one that runs longest.
+ * If two overlap (a plan switch), the bigger plan wins, then the one that runs longest.
  */
 export function storeBillingState(subscriptions: Record<string, StoreSubscription>, now = Date.now()): StoreBilling {
   const live = Object.entries(subscriptions)
@@ -60,7 +63,7 @@ export function storeBillingState(subscriptions: Record<string, StoreSubscriptio
     })
     .sort(
       (a, b) =>
-        Number(b.planned!.plan === 'plus') - Number(a.planned!.plan === 'plus') ||
+        PLAN_RANK[b.planned!.plan] - PLAN_RANK[a.planned!.plan] ||
         time(b.sub.expires_date) - time(a.sub.expires_date)
     );
   if (!live.length) return NONE;

@@ -37,7 +37,7 @@ export const MOCK_REMOVED: RemovedComment[] = [
     id: 'c1', platform: 'instagram', username: 'hatekeyboard_warrior',
     text: 'You are absolutely disgusting and should not be allowed online 🤮',
     reason: 'harassment', confidence: 0.94, language: 'English', postRef: 'Reel · Summer drop',
-    createdAt: min(4),
+    createdAt: min(4), action: 'deleted', // auto: harassment at 80%+ is deleted
   },
   {
     id: 'c2', platform: 'tiktok', username: 'spambot_4471',
@@ -61,7 +61,7 @@ export const MOCK_REMOVED: RemovedComment[] = [
     id: 'c5', platform: 'instagram', username: 'troll_acct_99',
     text: 'back again with another L take 💀💀',
     reason: 'harassment', confidence: 1, language: 'English', postRef: 'Reel · Opinion',
-    createdAt: hr(5),
+    createdAt: hr(5), action: 'deleted',
   },
   {
     id: 'c6', platform: 'tiktok', username: 'random_hater',

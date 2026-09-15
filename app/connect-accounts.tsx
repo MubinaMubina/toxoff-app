@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, ScrollView, Text, View } from 'react-native';
+import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { PlatformIcon } from '../src/components/PlatformIcon';
 import { Button, Card, H1, HeaderButton, Muted, RowSeparator } from '../src/components/ui';
@@ -14,8 +14,8 @@ import { ConnectedAccount, Platform } from '../src/types';
 const PLATFORMS: Platform[] = ['instagram', 'tiktok'];
 
 const META: Record<Platform, { name: string; blurb: string }> = {
-  instagram: { name: 'Instagram', blurb: 'Comments on posts, reels & stories' },
-  tiktok: { name: 'TikTok', blurb: 'Comments on your videos' },
+  instagram: { name: 'Instagram', blurb: 'Comments on your posts and reels' },
+  tiktok: { name: 'TikTok', blurb: 'Coming soon' },
 };
 
 // Linked accounts sit in the same two columns as the platform header: status icon under the
@@ -27,15 +27,17 @@ const COLUMN_GAP = 14;
 export default function ConnectAccounts() {
   const { colors, font, spacing } = useTheme();
   const router = useRouter();
-  const { accounts, connectAccount, disconnectAccount } = useModeration();
+  const { accounts, status, connectAccount, disconnectAccount, togglePause, freeCommentsUsed, freeCommentAllowance } = useModeration();
   const { subscription } = useAuth();
   const [connecting, setConnecting] = useState<Platform | null>(null);
 
   const plan = getPlan(subscription.plan);
   const atLimit = accounts.length >= plan.maxAccounts;
-  const anyConnected = accounts.length > 0;
+  const anyConnected = accounts.some((a) => a.platform === 'instagram' && a.connected);
+  const outOfFreeChecks = !subscription.paying && freeCommentsUsed >= freeCommentAllowance;
 
   const connect = async (platform: Platform) => {
+    if (platform !== 'instagram' || atLimit || connecting !== null) return;
     setConnecting(platform);
     try {
       await connectAccount(platform);
@@ -67,7 +69,7 @@ export default function ConnectAccounts() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
       <ScrollView contentContainerStyle={{ flexGrow: 1, paddingHorizontal: spacing.gutter }}>
-        <HeaderButton icon="close" label="Close" onPress={() => router.back()} />
+        <HeaderButton icon="close" label="Close" onPress={() => router.canGoBack() ? router.back() : router.replace('/(tabs)')} />
 
         <H1 style={{ marginTop: 8 }}>Connect your accounts</H1>
         <Muted style={{ marginTop: 6 }}>
@@ -89,49 +91,78 @@ export default function ConnectAccounts() {
                       {META[platform].blurb}
                     </Text>
                   </View>
-                  {connecting === platform ? (
-                    <ActivityIndicator color={colors.primary} />
-                  ) : (
-                    <Button
-                      label={linked.length ? 'Add' : 'Connect'}
-                      size="sm"
-                      fullWidth={false}
-                      disabled={atLimit || connecting !== null}
-                      onPress={() => connect(platform)}
-                      style={{ alignSelf: 'center' }}
-                    />
-                  )}
                 </View>
+                {platform === 'instagram' && (
+                  <Button
+                    label={linked.length ? 'Add Instagram account' : 'Connect Instagram'}
+                    size="md"
+                    loading={connecting === platform}
+                    disabled={atLimit || connecting !== null}
+                    onPress={() => connect(platform)}
+                    style={{ marginTop: 16 }}
+                  />
+                )}
 
                 {linked.map((account) => {
                   const overLimit = accounts.indexOf(account) >= plan.maxAccounts;
-                  const warning = !account.connected
-                    ? 'Access expired — disconnect and connect again'
-                    : overLimit
-                      ? `Not moderated on ${plan.name} — upgrade or disconnect another account`
-                      : null;
+                  const eligible = account.platform === 'instagram' && account.connected && !overLimit && !outOfFreeChecks;
+                  const healthy = status === 'ready' && eligible && !account.paused;
+                  const accountStatus = status === 'loading'
+                    ? 'Checking account status…'
+                    : status === 'offline'
+                      ? 'Status unavailable. Refresh Home to check again.'
+                      : account.platform === 'tiktok'
+                        ? 'TikTok moderation is not available yet'
+                        : !account.connected
+                          ? 'Access expired. Disconnect and connect again.'
+                          : overLimit
+                            ? `Outside your ${plan.name} limit. Upgrade or disconnect another account.`
+                            : outOfFreeChecks
+                              ? 'Free checks used up. New comments aren’t being checked.'
+                              : account.paused
+                                ? 'Paused. New comments aren’t being checked.'
+                                : 'Protection on';
                   return (
                     <View key={account.id} style={{ marginTop: 14 }}>
                       <RowSeparator inset={LOGO_BOX + COLUMN_GAP} />
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: COLUMN_GAP, paddingTop: 12 }}>
                         <View style={{ width: LOGO_BOX, alignItems: 'center' }}>
                           <Ionicons
-                            name={warning ? 'alert-circle' : 'checkmark-circle'}
+                            name={healthy ? 'checkmark-circle' : status === 'ready' && eligible && account.paused ? 'pause-circle' : 'alert-circle'}
                             size={20}
-                            color={warning ? colors.warning : colors.success}
+                            color={healthy ? colors.primary : colors.textMuted}
                           />
                         </View>
                         <View style={{ flex: 1 }}>
                           <Text style={{ color: colors.text, fontSize: font.size.md, fontWeight: font.weight.medium }}>
                             {account.handle}
                           </Text>
-                          {warning && (
-                            <Text style={{ color: colors.warning, fontSize: font.size.xs, marginTop: 1 }}>
-                              {warning}
-                            </Text>
-                          )}
+                          <Text style={{ color: healthy ? colors.primary : colors.textMuted, fontSize: font.size.sm, marginTop: 4 }}>
+                            {accountStatus}
+                          </Text>
                         </View>
-                        <Pressable onPress={() => confirmDisconnect(account)} hitSlop={12}>
+                      </View>
+                      <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: 12, rowGap: 4, marginTop: 10, marginLeft: LOGO_BOX + COLUMN_GAP }}>
+                        {eligible && (
+                          <Button
+                            label={account.paused ? 'Resume moderation' : 'Pause moderation'}
+                            onPress={() => togglePause(account.id)}
+                            disabled={status !== 'ready'}
+                            size="sm"
+                            variant="secondary"
+                            fullWidth={false}
+                            style={{ maxWidth: '100%' }}
+                          />
+                        )}
+                        {status === 'ready' && account.platform === 'instagram' && account.connected && (overLimit || outOfFreeChecks) && (
+                          <Button label="See plans" onPress={() => router.push('/paywall')} size="sm" variant="secondary" fullWidth={false} />
+                        )}
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel={`Disconnect ${account.handle}`}
+                          onPress={() => confirmDisconnect(account)}
+                          style={{ minHeight: 44, justifyContent: 'center', paddingHorizontal: 4 }}
+                        >
                           <Text style={{ color: colors.danger, fontSize: font.size.sm, fontWeight: font.weight.semibold }}>
                             Disconnect
                           </Text>
@@ -152,7 +183,7 @@ export default function ConnectAccounts() {
           </Text>
           {/* One-account plans get the upgrade banner below instead of a second link. */}
           {atLimit && plan.maxAccounts > 1 && (
-            <Pressable onPress={() => router.push('/paywall')} hitSlop={12}>
+            <Pressable accessibilityRole="button" accessibilityLabel="Upgrade your plan" onPress={() => router.push('/paywall')} style={{ minHeight: 44, justifyContent: 'center' }}>
               <Text style={{ color: colors.primary, fontSize: font.size.sm, fontWeight: font.weight.semibold }}>
                 Upgrade
               </Text>
@@ -162,6 +193,8 @@ export default function ConnectAccounts() {
 
         {atLimit && plan.maxAccounts === 1 && (
           <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Upgrade from ${plan.name} to moderate up to 5 Instagram accounts`}
             onPress={() => router.push('/paywall')}
             style={{
               flexDirection: 'row',
@@ -175,8 +208,7 @@ export default function ConnectAccounts() {
           >
             <Ionicons name="sparkles" size={18} color={colors.primary} />
             <Text style={{ color: colors.primary, fontSize: font.size.sm, flex: 1, lineHeight: 19 }}>
-              {plan.name} covers one account. Upgrade to Plus to moderate up to 5 across Instagram &
-              TikTok.
+              {plan.name} covers one account. Upgrade to Plus to moderate up to 5 Instagram accounts.
             </Text>
             <Ionicons name="chevron-forward" size={16} color={colors.primary} />
           </Pressable>
@@ -194,8 +226,8 @@ export default function ConnectAccounts() {
         >
           <Ionicons name="lock-closed" size={18} color={colors.textMuted} />
           <Text style={{ color: colors.textMuted, fontSize: font.size.sm, flex: 1, lineHeight: 19 }}>
-            We only request permission to read and hide comments. We never post on your behalf or
-            access your DMs.
+            toxoff can read, hide and restore comments, and delete them if you enable deletion.
+            We never publish posts or access your DMs. You can disconnect anytime.
           </Text>
         </View>
 
@@ -208,7 +240,7 @@ export default function ConnectAccounts() {
             disabled={!anyConnected}
           />
           {!anyConnected && (
-            <Pressable onPress={() => router.replace('/(tabs)')}>
+            <Pressable accessibilityRole="button" onPress={() => router.replace('/(tabs)')} style={{ minHeight: 44, justifyContent: 'center' }}>
               <Text style={{ color: colors.textMuted, textAlign: 'center', fontSize: font.size.md }}>
                 I'll do this later
               </Text>

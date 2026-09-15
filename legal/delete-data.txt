@@ -15,9 +15,12 @@ Either of these stops toxoff reading and hiding comments on your posts:
 
 2. DELETE YOUR TOXOFF ACCOUNT AND ALL ITS DATA
 
-Email support@toxoff.app from the email address you use with toxoff, with the subject
-"Delete my toxoff account". We will delete your account within 30 days and email you when it
-is done.
+In the app: open Settings, scroll to the bottom and tap "Delete my account". After two
+confirmations your account and all of its data are deleted immediately.
+
+Without the app: email support@toxoff.app from the email address you use with toxoff, with the
+subject "Delete my toxoff account". We will delete your account within 30 days and email you
+when it is done.
 
 This deletes:
 - your account, name and email;
@@ -39,4 +42,4 @@ iPhone: Settings > [your name] > Subscriptions > toxoff > Cancel Subscription.
 
 
 Questions: support@toxoff.app
-Privacy policy: https://sjfmcieunormozrybqmi.supabase.co/storage/v1/object/public/legal/privacy.txt
+Privacy policy: https://toxoff.app/privacy.html

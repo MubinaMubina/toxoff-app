@@ -1,0 +1,13 @@
+Tool: built-in imagegen.
+Input: assets/toxoff-icon-3d-1024.png
+Output: assets/toxoff-icon-green-1024.png
+Export: resized to 1024 x 1024 using sips; opaque RGB PNG.
+Background direction: deep forest green, target #123F35. Generated color values may vary slightly.
+
+Prompt
+
+Use case: precise-object-edit. Edit the attached toxoff iOS app icon. Change ONLY the background color family from indigo-purple to an elegant deep forest green, target hex #123F35, RGB 18 63 53. The green should feel calm, grounded, protective and premium: visibly rich dark green with a subtle cool undertone, not neon, lime, military olive, turquoise or nearly black.
+Apply this same dark forest green to the entire edge-to-edge canvas AND to the open interior of the front outlined speech bubble, so both areas read as the same background plane. Keep background flat, consistent and opaque, no vignette or broad lighting gradient. Update the faint local contact-shadow colors to harmonize naturally with the new green background so there are no remaining purple halos on the background.
+Strictly preserve everything else: the exact two speech-bubble silhouettes and positions, white front bubble outline, white check mark, pale lavender rear bubble, existing subtle satin 3D bevels and tiny highlights, original thicknesses, original scale, spacing and padding. Do not enlarge or move the emblem. Keep the white faces clean neutral white and rear bubble extremely pale lavender as in the input. Do not add new elements or stronger depth. Preserve the straight-on view and shallow dimensional finish.
+Output exactly 1024 x 1024 pixels as a fully opaque RGB PNG. Full square canvas with sharp square corners; no pre-rounded app tile, border, frame, extra outer shadow, text, letters, watermark, mockup or transparency. Return the finished icon only.
+

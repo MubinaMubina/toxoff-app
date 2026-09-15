@@ -42,8 +42,8 @@ does not guarantee that every harmful comment will be caught.
 
 5. SUBSCRIPTIONS
 
-- Solo and Plus are auto-renewing subscriptions sold through Apple's App Store and charged to
-  your Apple ID.
+- Solo, Plus and Studio are auto-renewing subscriptions sold through Apple's App Store and charged
+  to your Apple ID.
 - A subscription renews automatically at the end of each period unless you cancel at least 24
   hours before it ends. Manage or cancel it in your App Store account settings.
 - Subscribing during the free trial starts the paid plan immediately.
@@ -59,7 +59,7 @@ interfere with the service, or to reverse engineer or overload it.
 7. ENDING YOUR USE
 
 You can stop using toxoff and delete your account at any time (see
-https://sjfmcieunormozrybqmi.supabase.co/storage/v1/object/public/legal/delete-data.txt).
+https://toxoff.app/delete-account.html).
 We may suspend or end accounts that break these terms.
 
 
@@ -83,5 +83,5 @@ We may update these terms. We will post the new version at this address with a n
 date, and tell you in the app if the changes are significant.
 
 
-Privacy policy: https://sjfmcieunormozrybqmi.supabase.co/storage/v1/object/public/legal/privacy.txt
+Privacy policy: https://toxoff.app/privacy.html
 Questions: support@toxoff.app

@@ -1,11 +1,17 @@
-// toxoff design tokens. Soft purple primary (#534AB7), clean/minimal, light + dark.
+// toxoff design tokens. Deep forest green primary, taken from the app icon (assets/icon.png:
+// a white outlined speech bubble with a check, a pale lavender bubble behind it, on #13433B).
+// Clean/minimal, light + dark. Neutrals carry a faint green cast so cards sit naturally with it.
 
 export const palette = {
-  purple: '#534AB7',
-  purpleDark: '#433CA0',
-  purpleLight: '#6F66D6',
-  purpleSoft: '#EEEDFB',
-  purpleSoftDark: '#26233F',
+  forest: '#13433B', // the icon's background: brand colour, splash, notification tint
+  forestDeep: '#0D2F2A',
+  forestMid: '#14574B', // light-mode primary: reads as green, not near-black, on white
+  forestLight: '#2E8C78',
+  mint: '#4CBFA6', // dark-mode primary: enough luminance on near-black
+  mintLight: '#6FD3BE',
+  forestSoft: '#E4F1EC',
+  forestSoftDark: '#15312B',
+  lavender: '#E0E0F8', // the icon's rear bubble; a quiet second accent
 
   green: '#22A06B',
   greenSoft: '#E4F6EE',
@@ -16,7 +22,7 @@ export const palette = {
   blue: '#3B82F6',
 
   white: '#FFFFFF',
-  black: '#0A0A0F',
+  black: '#0A0F0D',
 };
 
 export type ColorScheme = {
@@ -46,16 +52,16 @@ export type ColorScheme = {
 export const lightColors: ColorScheme = {
   background: '#FFFFFF',
   surface: '#FFFFFF',
-  surfaceAlt: '#F6F6FA',
+  surfaceAlt: '#F3F7F5',
   card: '#FFFFFF',
-  border: '#ECECF2',
-  text: '#16161D',
-  textMuted: '#6A6A78',
-  textFaint: '#A0A0AE',
-  primary: palette.purple,
-  primaryDark: palette.purpleDark,
-  primaryLight: palette.purpleLight,
-  primarySoft: palette.purpleSoft,
+  border: '#E6ECE9',
+  text: '#15201C',
+  textMuted: '#66736E',
+  textFaint: '#66736E', // secondary information remains readable on white
+  primary: palette.forestMid,
+  primaryDark: palette.forest,
+  primaryLight: palette.forestLight,
+  primarySoft: palette.forestSoft,
   onPrimary: '#FFFFFF',
   success: palette.green,
   successSoft: palette.greenSoft,
@@ -63,24 +69,24 @@ export const lightColors: ColorScheme = {
   dangerSoft: palette.redSoft,
   warning: palette.amber,
   warningSoft: palette.amberSoft,
-  overlay: 'rgba(10,10,15,0.45)',
-  tabInactive: '#A0A0AE',
+  overlay: 'rgba(10,15,13,0.45)',
+  tabInactive: '#66736E',
 };
 
 export const darkColors: ColorScheme = {
-  background: '#0E0E14',
-  surface: '#15151D',
-  surfaceAlt: '#1B1B25',
-  card: '#191921',
-  border: '#282834',
-  text: '#F4F4F8',
-  textMuted: '#9A9AAC',
-  textFaint: '#62626F',
-  primary: palette.purpleLight,
-  primaryDark: palette.purple,
-  primaryLight: '#857CE6',
-  primarySoft: palette.purpleSoftDark,
-  onPrimary: '#FFFFFF',
+  background: '#0C1210',
+  surface: '#121A17',
+  surfaceAlt: '#182220',
+  card: '#151E1B',
+  border: '#25312D',
+  text: '#F2F6F4',
+  textMuted: '#98A6A1',
+  textFaint: '#98A6A1', // timestamps and status copy meet normal-text contrast
+  primary: palette.mint,
+  primaryDark: palette.forestLight,
+  primaryLight: palette.mintLight,
+  primarySoft: palette.forestSoftDark,
+  onPrimary: '#0C1210',
   success: '#34C98A',
   successSoft: '#13301F',
   danger: '#F26A6E',
@@ -88,7 +94,7 @@ export const darkColors: ColorScheme = {
   warning: '#F0B45E',
   warningSoft: '#352915',
   overlay: 'rgba(0,0,0,0.6)',
-  tabInactive: '#62626F',
+  tabInactive: '#98A6A1',
 };
 
 export const radius = { sm: 8, md: 12, lg: 16, xl: 22, pill: 999 };

@@ -1,7 +1,9 @@
-import type { User } from '@supabase/supabase-js';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import type { Session, User } from '@supabase/supabase-js';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as AuthSession from 'expo-auth-session';
 import * as Crypto from 'expo-crypto';
+import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
 import React, {
   createContext,
@@ -9,10 +11,22 @@ import React, {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react';
 import { TRIAL_DAYS } from '../data/plans';
 import { identifyPurchaser } from '../lib/purchases';
+import {
+  isVerifiedRecoverySession,
+  isRetryableRecoveryError,
+  parseRecoveryCallback,
+  PASSWORD_RECOVERY_REDIRECT,
+  PASSWORD_RECOVERY_STORAGE_KEY,
+  PasswordRecoveryState,
+  passwordResetError,
+  RECOVERY_LINK_MESSAGE,
+  RECOVERY_CONNECTION_MESSAGE,
+} from '../lib/passwordRecovery';
 import { isSupabaseConfigured, supabase } from '../lib/supabase';
 import { BillingInterval, PaidPlanId, PlanId } from '../types';
 
@@ -50,6 +64,13 @@ type AuthValue = {
   user: AppUser | null;
   subscription: Subscription;
   loading: boolean;
+  passwordRecovery: PasswordRecoveryState;
+  requestPasswordReset: (email: string) => Promise<void>;
+  resetPassword: (password: string) => Promise<void>;
+  leavePasswordRecovery: () => Promise<void>;
+  /** false until the user finishes (or skips) onboarding; null while the profile is loading. */
+  onboarded: boolean | null;
+  completeOnboarding: () => Promise<void>;
   signUp: (email: string, password: string, name: string) => Promise<{ needsConfirmation: boolean }>;
   signIn: (email: string, password: string) => Promise<void>;
   signInWithGoogle: () => Promise<SocialSignInResult>;
@@ -60,9 +81,10 @@ type AuthValue = {
 };
 
 const PROFILE_COLUMNS =
-  'plan, trial_ends_at, sub_status, billing_status, billing_plan, billing_interval, billing_period_end, billing_cancel_at_period_end, billing_store';
+  'plan, trial_ends_at, sub_status, billing_status, billing_plan, billing_interval, billing_period_end, billing_cancel_at_period_end, billing_store, onboarded_at';
 
 type ProfileRow = {
+  onboarded_at: string | null;
   plan: PlanId | null;
   trial_ends_at: string | null;
   sub_status: 'trialing' | 'active' | 'none' | null;
@@ -138,20 +160,165 @@ function demoTrial(plan: PlanId): Subscription {
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<AppUser | null>(null);
+  const [sessionUser, setUser] = useState<AppUser | null>(null);
   const [subscription, setSubscription] = useState<Subscription>(FREE);
-  const [loading, setLoading] = useState(isSupabaseConfigured);
+  const [authInitialized, setAuthInitialized] = useState(!isSupabaseConfigured);
+  const [linksInitialized, setLinksInitialized] = useState(false);
+  const loading = !authInitialized || !linksInitialized;
+  const [passwordRecovery, setPasswordRecovery] = useState<PasswordRecoveryState>('idle');
+  // INITIAL_SESSION can arrive before AsyncStorage or the cold-start link. Do not publish that
+  // session to app screens, moderation requests, or profile subscriptions until both are checked.
+  const user = !loading && passwordRecovery === 'idle' ? sessionUser : null;
+  const recoveryState = useRef<PasswordRecoveryState>('idle');
+  const recoverySession = useRef<{ userId: string; accessToken: string; expiresAt: number } | null>(null);
+  const recoveryEvent = useRef<Session | null>(null);
+  const lastRecoveryUrl = useRef<string | null>(null);
+  const recoveryQueue = useRef<Promise<void>>(Promise.resolve());
+  // Demo mode: existing "accounts" count as onboarded; a demo sign-up goes through onboarding.
+  const [onboarded, setOnboarded] = useState<boolean | null>(isSupabaseConfigured ? null : true);
   const userId = user?.id ?? null;
+
+  const changeRecoveryState = useCallback((state: PasswordRecoveryState) => {
+    recoveryState.current = state;
+    setPasswordRecovery(state);
+  }, []);
 
   useEffect(() => {
     if (!isSupabaseConfigured) return;
     // Emits INITIAL_SESSION right away, then every sign-in, sign-out and token refresh.
-    const { data } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ? toAppUser(session.user) : null);
-      setLoading(false);
+    const { data } = supabase.auth.onAuthStateChange((event, session) => {
+      // Do not await Supabase calls in this listener: it runs while the auth lock is held.
+      if (event === 'PASSWORD_RECOVERY') {
+        if (recoveryState.current === 'verifying') {
+          recoveryEvent.current = session;
+        } else {
+          // Recovery events never become an ordinary login, even outside our expected callback.
+          changeRecoveryState('invalid');
+          void AsyncStorage.setItem(PASSWORD_RECOVERY_STORAGE_KEY, 'active').catch(() => {});
+        }
+      }
+      if (recoveryState.current === 'ready' && event === 'SIGNED_IN' && session?.access_token !== recoverySession.current?.accessToken) {
+        recoverySession.current = null;
+        changeRecoveryState('invalid');
+      }
+      setUser(recoveryState.current === 'idle' && session?.user ? toAppUser(session.user) : null);
+      setAuthInitialized(true);
     });
     return () => data.subscription.unsubscribe();
+  }, [changeRecoveryState]);
+
+  const handleRecoveryUrl = useCallback(async (url: string) => {
+    const callback = parseRecoveryCallback(url);
+    if (callback.kind === 'ignore' || lastRecoveryUrl.current === url) return;
+    lastRecoveryUrl.current = url;
+    recoverySession.current = null;
+    recoveryEvent.current = null;
+    changeRecoveryState('verifying');
+    setUser(null);
+    try {
+      // A restarted app must not interpret an unfinished recovery session as a normal sign-in.
+      // This flag contains no email, token, or other credentials.
+      await AsyncStorage.setItem(PASSWORD_RECOVERY_STORAGE_KEY, 'active');
+      if (callback.kind !== 'code' || !isSupabaseConfigured) throw new Error('Invalid recovery');
+      const { data, error } = await supabase.auth.exchangeCodeForSession(callback.code);
+      if (error || !data.session) throw new Error('Invalid recovery');
+      const { data: verified, error: verificationError } = await supabase.auth.getUser(data.session.access_token);
+      if (verificationError || !isVerifiedRecoverySession(recoveryEvent.current, data.session, verified.user?.id ?? null)) {
+        throw new Error('Invalid recovery');
+      }
+      recoverySession.current = {
+        userId: data.session.user.id,
+        accessToken: data.session.access_token,
+        expiresAt: Math.min(data.session.expires_at! * 1000, Date.now() + 15 * 60_000),
+      };
+      changeRecoveryState('ready');
+    } catch {
+      changeRecoveryState('invalid');
+    }
+  }, [changeRecoveryState]);
+
+  useEffect(() => {
+    let active = true;
+    const enqueue = (url: string) => {
+      recoveryQueue.current = recoveryQueue.current.then(() => handleRecoveryUrl(url));
+      return recoveryQueue.current;
+    };
+    // Keep startup navigation blocked while inspecting the marker and any cold-start link.
+    const initialize = async () => {
+      try {
+        const pending = await AsyncStorage.getItem(PASSWORD_RECOVERY_STORAGE_KEY);
+        if (pending && active) {
+          changeRecoveryState('invalid');
+          setUser(null);
+        }
+        const initialUrl = await Linking.getInitialURL();
+        if (initialUrl && active) await enqueue(initialUrl);
+      } catch {
+        if (active) {
+          changeRecoveryState('invalid');
+          setUser(null);
+        }
+      } finally {
+        if (active) setLinksInitialized(true);
+      }
+    };
+    // Queue warm links behind initialization so a stored marker cannot overwrite a verified link.
+    const initialized = initialize();
+    const listener = Linking.addEventListener('url', ({ url }) => {
+      void initialized.then(() => { if (active) return enqueue(url); });
+    });
+    return () => { active = false; listener.remove(); };
+  }, [changeRecoveryState, handleRecoveryUrl]);
+
+  const requestPasswordReset = useCallback(async (email: string) => {
+    if (!isSupabaseConfigured) throw new Error('Password reset is unavailable in this preview.');
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+        redirectTo: PASSWORD_RECOVERY_REDIRECT,
+      });
+      if (error) throw error;
+    } catch (error) {
+      throw new Error(passwordResetError(error, 'request'));
+    }
   }, []);
+
+  const resetPassword = useCallback(async (password: string) => {
+    const authorization = recoverySession.current;
+    if (!isSupabaseConfigured || recoveryState.current !== 'ready' || !authorization || authorization.expiresAt <= Date.now()) {
+      changeRecoveryState('invalid');
+      throw new Error(RECOVERY_LINK_MESSAGE);
+    }
+    if (password.length < 8) throw new Error('Use at least 8 characters for your new password.');
+    const { data: verified, error: verificationError } = await supabase.auth.getUser(authorization.accessToken)
+      .catch(() => { throw new Error(RECOVERY_CONNECTION_MESSAGE); });
+    if (isRetryableRecoveryError(verificationError)) throw new Error(RECOVERY_CONNECTION_MESSAGE);
+    const { data: current, error: sessionError } = await supabase.auth.getSession()
+      .catch(() => { throw new Error(RECOVERY_CONNECTION_MESSAGE); });
+    if (isRetryableRecoveryError(sessionError)) throw new Error(RECOVERY_CONNECTION_MESSAGE);
+    if (sessionError || verificationError || recoveryState.current !== 'ready' || recoverySession.current !== authorization || current.session?.access_token !== authorization.accessToken || verified.user?.id !== authorization.userId) {
+      recoverySession.current = null;
+      changeRecoveryState('invalid');
+      throw new Error(RECOVERY_LINK_MESSAGE);
+    }
+    const { error } = await supabase.auth.updateUser({ password })
+      .catch((error) => { throw new Error(passwordResetError(error, 'update')); });
+    if (error) throw new Error(passwordResetError(error, 'update'));
+    recoverySession.current = null;
+    changeRecoveryState('complete');
+  }, [changeRecoveryState]);
+
+  const leavePasswordRecovery = useCallback(async () => {
+    // Keep the recovery gate until the persisted auth session is cleared successfully.
+    if (isSupabaseConfigured) {
+      const { error } = await supabase.auth.signOut({ scope: 'local' });
+      if (error) throw new Error('Could not finish signing out. Check your connection and try again.');
+    }
+    await AsyncStorage.removeItem(PASSWORD_RECOVERY_STORAGE_KEY);
+    recoverySession.current = null;
+    recoveryEvent.current = null;
+    setUser(null);
+    changeRecoveryState('idle');
+  }, [changeRecoveryState]);
 
   const loadSubscription = useCallback(async (id: string) => {
     const { data, error } = await supabase
@@ -161,12 +328,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .single();
     if (error) throw error;
     setSubscription(toSubscription(data as ProfileRow));
+    setOnboarded((data as ProfileRow).onboarded_at !== null);
   }, []);
 
   useEffect(() => {
     if (!isSupabaseConfigured) return;
     if (!userId) {
       setSubscription(FREE);
+      setOnboarded(null);
       return;
     }
     loadSubscription(userId).catch((e) => console.warn('Could not load subscription', e));
@@ -178,7 +347,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .on(
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${userId}` },
-        (payload) => setSubscription(toSubscription(payload.new as ProfileRow))
+        (payload) => {
+          const row = payload.new as ProfileRow;
+          setSubscription(toSubscription(row));
+          if ('onboarded_at' in row) setOnboarded(row.onboarded_at !== null);
+        }
       )
       .subscribe();
     return () => {
@@ -195,6 +368,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!isSupabaseConfigured) {
       setUser({ id: 'demo-user', email, name: name || 'Creator' });
       setSubscription(demoTrial('plus'));
+      setOnboarded(false);
       return { needsConfirmation: false };
     }
     // The handle_new_user trigger (supabase/migrations) creates the profile and starts the trial.
@@ -220,6 +394,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const demoSocialSignIn = (email: string, name: string): SocialSignInResult => {
     setUser({ id: 'demo-user', email, name });
     setSubscription(demoTrial('plus'));
+    setOnboarded(false);
     return { isNew: true };
   };
 
@@ -229,7 +404,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const redirectTo = AuthSession.makeRedirectUri({ scheme: 'toxoff' });
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo, skipBrowserRedirect: true },
+      // select_account: always show Google's account chooser (the branded "to continue to toxoff"
+      // screen) instead of silently reusing whichever account the browser last used.
+      options: { redirectTo, skipBrowserRedirect: true, queryParams: { prompt: 'select_account' } },
     });
     if (error) throw error;
     const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
@@ -285,7 +462,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (isSupabaseConfigured) await supabase.auth.signOut();
     setUser(null);
     setSubscription(FREE);
+    setOnboarded(isSupabaseConfigured ? null : true);
   };
+
+  // Marks onboarding done (or skipped) so the app stops sending the user there.
+  const completeOnboarding = useCallback(async () => {
+    setOnboarded(true);
+    if (!isSupabaseConfigured || !userId) return;
+    const { error } = await supabase
+      .from('profiles')
+      .update({ onboarded_at: new Date().toISOString() })
+      .eq('id', userId);
+    if (error) console.warn('Could not save onboarding state', error.message);
+  }, [userId]);
 
   // Billing state is written by the backend (App Store webhooks); re-read it after a purchase.
   const refreshSubscription = useCallback(async () => {
@@ -305,6 +494,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       user,
       subscription,
       loading,
+      passwordRecovery,
+      requestPasswordReset,
+      resetPassword,
+      leavePasswordRecovery,
+      onboarded,
+      completeOnboarding,
       signUp,
       signIn,
       signInWithGoogle,
@@ -313,7 +508,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       refreshSubscription,
       setDemoBilling,
     }),
-    [user, subscription, loading, refreshSubscription]
+    [user, subscription, loading, passwordRecovery, requestPasswordReset, resetPassword, leavePasswordRecovery, onboarded, completeOnboarding, refreshSubscription]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

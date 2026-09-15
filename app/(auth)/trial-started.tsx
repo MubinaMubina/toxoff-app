@@ -77,9 +77,12 @@ export default function TrialStarted() {
         )}
       </View>
 
+      {/* A few questions set the filters up (app/onboarding.tsx); it ends by connecting an account. */}
       <View style={{ paddingHorizontal: spacing.gutter, paddingBottom: 24, gap: 12 }}>
-        <Button label="Connect your accounts" icon="link-outline" onPress={() => router.replace('/connect-accounts')} />
-        <Button label="Skip for now" variant="ghost" onPress={() => router.replace('/(tabs)')} />
+        <Button label="Set up toxoff" icon="sparkles-outline" onPress={() => router.replace('/onboarding')} />
+        <Text style={{ color: colors.textFaint, fontSize: font.size.xs, textAlign: 'center' }}>
+          A minute of questions, so the filter fits you.
+        </Text>
       </View>
     </SafeAreaView>
   );

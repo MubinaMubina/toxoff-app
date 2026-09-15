@@ -9,8 +9,9 @@
     "web": "expo start --web",
     "lint": "expo lint",
     "typecheck": "tsc --noEmit",
+    "test:ui": "node --test scripts/password-recovery.test.cjs scripts/auth-recovery.test.cjs scripts/protection.test.cjs",
     "test:functions": "deno test --allow-env --config supabase/functions/api/deno.json supabase/functions/tests",
-    "gen:assets": "node scripts/generate-assets.mjs"
+    "gen:assets": "python3 scripts/generate-assets.py"
   },
   "dependencies": {
     "@expo/vector-icons": "~14.0.4",

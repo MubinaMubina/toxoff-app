@@ -64,11 +64,14 @@ export function Button({
         onPress();
       }}
       disabled={disabled || loading}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ disabled: Boolean(disabled || loading), busy: Boolean(loading) }}
       // Small buttons keep their look but still get a 44pt tap target.
       hitSlop={Math.max(0, Math.ceil((44 - heights[size]) / 2))}
       style={({ pressed }) => [
         {
-          height: heights[size],
+          minHeight: Math.max(44, heights[size]),
           borderRadius: radius.md,
           backgroundColor: bg,
           flexDirection: 'row',
@@ -76,6 +79,7 @@ export function Button({
           justifyContent: 'center',
           gap: 8,
           paddingHorizontal: 20,
+          paddingVertical: 12,
           alignSelf: fullWidth ? 'stretch' : 'flex-start',
           borderWidth: variant === 'ghost' ? 1 : 0,
           borderColor: colors.border,
@@ -89,7 +93,7 @@ export function Button({
       ) : (
         <>
           {icon && <Ionicons name={icon} size={fonts[size] + 3} color={fg} />}
-          <Text style={{ color: fg, fontSize: fonts[size], fontWeight: font.weight.semibold }}>
+          <Text style={{ color: fg, fontSize: fonts[size], fontWeight: font.weight.semibold, flexShrink: 1, textAlign: 'center' }}>
             {label}
           </Text>
         </>
@@ -320,7 +324,7 @@ export function SectionLabel({
       </Text>
       {action && (
         // hitSlop brings the small link up to a 44pt tap target without moving the layout.
-        <Pressable onPress={action.onPress} hitSlop={{ top: 14, bottom: 14, left: 12, right: 12 }}>
+        <Pressable accessibilityRole="button" onPress={action.onPress} hitSlop={{ top: 14, bottom: 14, left: 12, right: 12 }}>
           <Text style={{ color: colors.primary, fontSize: font.size.sm, fontWeight: font.weight.semibold }}>
             {action.label}
           </Text>
@@ -357,16 +361,22 @@ export function Segmented<T extends string>({
         return (
           <Pressable
             key={opt.value}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: active }}
+            accessibilityLabel={opt.label}
             onPress={() => {
               Haptics.selectionAsync().catch(() => {});
               onChange(opt.value);
             }}
             style={{
               flex: 1,
+              minHeight: 44,
               paddingVertical: 9,
+              paddingHorizontal: 6,
               borderRadius: radius.sm,
               backgroundColor: active ? colors.card : 'transparent',
               alignItems: 'center',
+              justifyContent: 'center',
               shadowColor: '#000',
               shadowOpacity: active ? 0.06 : 0,
               shadowRadius: 4,
@@ -379,6 +389,8 @@ export function Segmented<T extends string>({
                 color: active ? colors.text : colors.textMuted,
                 fontWeight: active ? font.weight.semibold : font.weight.medium,
                 fontSize: font.size.sm,
+                textAlign: 'center',
+                flexShrink: 1,
               }}
             >
               {opt.label}
