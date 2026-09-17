@@ -1,6 +1,7 @@
 import * as Haptics from 'expo-haptics';
 import React from 'react';
-import { Pressable, Text } from 'react-native';
+import { Pressable } from 'react-native';
+import { Text } from './AppText';
 import { useTheme } from '../theme/ThemeContext';
 
 export function FilterChip({
@@ -15,6 +16,8 @@ export function FilterChip({
   const { colors, font, radius } = useTheme();
   return (
     <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ selected: active }}
       onPress={() => {
         Haptics.selectionAsync().catch(() => {});
         onPress();
@@ -22,15 +25,17 @@ export function FilterChip({
       style={{
         paddingHorizontal: 14,
         paddingVertical: 8,
-        borderRadius: radius.pill,
-        backgroundColor: active ? colors.primary : colors.surfaceAlt,
+        minHeight: 44,
+        justifyContent: 'center',
+        borderRadius: radius.md,
+        backgroundColor: active ? colors.primary : colors.neutralSoft,
         borderWidth: 1,
-        borderColor: active ? colors.primary : colors.border,
+        borderColor: active ? colors.primary : colors.neutralBorder,
       }}
     >
       <Text
         style={{
-          color: active ? colors.onPrimary : colors.textMuted,
+          color: active ? colors.onPrimary : colors.neutral,
           fontSize: font.size.sm,
           fontWeight: font.weight.semibold,
         }}

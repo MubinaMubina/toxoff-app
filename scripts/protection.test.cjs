@@ -24,6 +24,7 @@ test('loading and offline never promote stale healthy accounts to confirmed prot
       const result = summary({ status, accounts, outOfFreeChecks: true });
       assert.equal(result.kind, status);
       assert.equal(result.activeCount, 0);
+      assert.equal(result.tone, 'warning');
       assert.equal(result.action, status === 'offline' ? 'retry' : null);
       assert.doesNotMatch(result.title, /is protected|are protected/);
     }
@@ -36,6 +37,7 @@ test('no Instagram account offers connection rather than claiming protection', (
     assert.equal(result.kind, 'unconnected');
     assert.equal(result.activeCount, 0);
     assert.equal(result.action, 'connect');
+    assert.equal(result.tone, 'info');
   }
 });
 
@@ -124,10 +126,11 @@ test('verified healthy Instagram accounts have singular and plural protection co
   assert.equal(single.activeCount, 1);
   assert.equal(single.title, 'Your Instagram is protected');
   assert.equal(single.action, null);
-  assert.equal(single.tone, 'primary');
+  assert.equal(single.tone, 'success');
   const multiple = summary({ accounts: [account('1'), account('2')], maxAccounts: 2 });
   assert.equal(multiple.kind, 'active');
   assert.equal(multiple.activeCount, 2);
+  assert.equal(multiple.tone, 'success');
   assert.equal(multiple.title, 'Your Instagram accounts are protected');
 });
 

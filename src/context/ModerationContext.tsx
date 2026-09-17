@@ -16,7 +16,8 @@ import {
   MOCK_FREE_COMMENTS_USED,
   MOCK_REMOVED,
 } from '../data/mockData';
-import { FREE_COMMENT_ALLOWANCE } from '../data/plans';
+import { AD_REWARDS_PER_DAY, FREE_CHECKS_PER_MONTH, freePeriod } from '../data/plans';
+import { initAds } from '../lib/ads';
 import { apiPost } from '../lib/api';
 import { isSupabaseConfigured, supabase } from '../lib/supabase';
 import { DAY_MS } from '../lib/time';
@@ -54,6 +55,16 @@ export type OnboardingAnswers = Preferences & {
   pushToken?: string | null; // omitted: preserve the existing token and permission
 };
 
+/** The Free plan's comment checks: this month's allowance, plus the pool of extra ones. */
+export type FreeChecks = {
+  used: number; // this month
+  allowance: number; // FREE_CHECKS_PER_MONTH
+  bonus: number; // extra checks left, from invites and rewarded ads
+  left: number; // in all: the rest of this month's, plus the extra ones
+  periodEnd: string | null; // ISO: when the monthly count starts again
+  adsLeftToday: number; // rewarded ads still available today
+};
+
 const DEFAULT_PREFERENCES: Preferences = {
   persona: null,
   logVisibility: 'conceal_deleted',
@@ -78,8 +89,9 @@ type ModerationValue = {
   concealed: (c: RemovedComment) => boolean;
   notificationsEnabled: boolean;
   metrics: Metrics;
-  freeCommentsUsed: number; // of freeCommentAllowance, shared by the trial and Free
-  freeCommentAllowance: number; // FREE_COMMENT_ALLOWANCE plus checks earned by inviting friends
+  freeChecks: FreeChecks;
+  /** Re-reads the checks and today's ad rewards, e.g. after watching an ad. */
+  refreshFreeChecks: () => Promise<void>;
   connectAccount: (platform: Platform, returnPath?: 'connect-accounts' | 'onboarding') => Promise<void>;
   disconnectAccount: (id: string) => Promise<void>;
   togglePause: (id: string) => void;
@@ -143,12 +155,14 @@ const LOG_COLUMNS =
 const LOG_LIMIT = 200;
 
 const PROFILE_PREFS =
-  'notifications_enabled, free_comments_used, bonus_comment_checks, persona, log_visibility, auto_erase_days, notification_mode';
+  'notifications_enabled, free_comments_used, free_period_start, bonus_comment_checks, created_at, persona, log_visibility, auto_erase_days, notification_mode';
 
 type ProfilePrefsRow = {
   notifications_enabled: boolean;
   free_comments_used: number;
+  free_period_start: string | null;
   bonus_comment_checks: number | null;
+  created_at: string | null;
   persona: Persona | null;
   log_visibility: LogVisibility | null;
   auto_erase_days: number | null;
@@ -202,21 +216,32 @@ const toFilters = (r: FiltersRow): FilterSettings => ({
   flaggedAction: r.flagged_action === 'delete' || r.flagged_action === 'hide' ? r.flagged_action : 'auto',
 });
 
-// Counted server-side so metrics stay right beyond the rows loaded into the log.
-async function fetchMetrics(userId: string): Promise<Metrics> {
-  const since = (ms: number) =>
-    supabase
-      .from('moderation_log')
-      .select('id', { count: 'exact', head: true })
-      .eq('user_id', userId)
-      .eq('restored', false)
-      .gte('created_at', new Date(Date.now() - ms).toISOString());
-  const [today, week, month] = await Promise.all([since(DAY_MS), since(7 * DAY_MS), since(30 * DAY_MS)]);
-  return { today: today.count ?? 0, week: week.count ?? 0, month: month.count ?? 0 };
+// Counted server-side, over the whole log: beyond the rows loaded here, and beyond the days the
+// Free plan's log reaches back.
+async function fetchMetrics(): Promise<Metrics> {
+  const { data, error } = await supabase.rpc('moderation_counts');
+  if (error) throw error;
+  const counts = (data ?? {}) as Partial<Metrics>;
+  return { today: counts.today ?? 0, week: counts.week ?? 0, month: counts.month ?? 0 };
 }
 
+// Rewarded ads watched in the last day (the backend records each one Google confirms).
+async function fetchAdsToday(userId: string): Promise<number> {
+  const { count, error } = await supabase
+    .from('ad_rewards')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', userId)
+    .gte('created_at', new Date(Date.now() - DAY_MS).toISOString());
+  if (error) throw error;
+  return count ?? 0;
+}
+
+// What the profile says about the free checks; the current month is worked out at render time.
+type ChecksRow = { used: number; periodStart: string | null; joined: string | null };
+const NO_CHECKS: ChecksRow = { used: 0, periodStart: null, joined: null };
+
 export function ModerationProvider({ children }: { children: React.ReactNode }) {
-  const { user } = useAuth();
+  const { user, subscription } = useAuth();
   // null in demo mode: every mutation below checks it to decide whether to persist.
   const userId = isSupabaseConfigured ? user?.id ?? null : null;
 
@@ -235,18 +260,37 @@ export function ModerationProvider({ children }: { children: React.ReactNode }) 
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
   const [reloadTick, setReloadTick] = useState(0);
   const [liveMetrics, setLiveMetrics] = useState<Metrics>(ZERO_METRICS);
-  const [freeCommentsUsed, setFreeCommentsUsed] = useState(
-    isSupabaseConfigured ? 0 : MOCK_FREE_COMMENTS_USED
+  const [checksRow, setChecksRow] = useState<ChecksRow>(
+    isSupabaseConfigured ? NO_CHECKS : { ...NO_CHECKS, used: MOCK_FREE_COMMENTS_USED }
   );
   const [bonusChecks, setBonusChecks] = useState(0);
+  const [adsToday, setAdsToday] = useState(0);
   const filtersDirty = useRef(false);
 
   const refreshMetrics = useCallback(() => {
     if (!userId) return;
-    fetchMetrics(userId)
+    fetchMetrics()
       .then(setLiveMetrics)
       .catch((e) => console.warn('Could not load metrics', e));
   }, [userId]);
+
+  const refreshFreeChecks = useCallback(async () => {
+    if (!userId) return;
+    const [prof, ads] = await Promise.all([
+      supabase.from('profiles').select('free_comments_used, free_period_start, bonus_comment_checks, created_at').eq('id', userId).single(),
+      fetchAdsToday(userId),
+    ]);
+    if (prof.error) throw prof.error;
+    const p = prof.data as Pick<ProfilePrefsRow, 'free_comments_used' | 'free_period_start' | 'bonus_comment_checks' | 'created_at'>;
+    setChecksRow({ used: p.free_comments_used, periodStart: p.free_period_start, joined: p.created_at });
+    setBonusChecks(p.bonus_comment_checks ?? 0);
+    setAdsToday(ads);
+  }, [userId]);
+
+  // Ads show on the Free plan only; the SDK is set up once someone who'll see them is signed in.
+  useEffect(() => {
+    if (userId && !subscription.paying) initAds().catch((e) => console.warn('Could not set up ads', e));
+  }, [userId, subscription.paying]);
 
   const reloadAccounts = useCallback(async () => {
     if (!userId) return;
@@ -268,8 +312,9 @@ export function ModerationProvider({ children }: { children: React.ReactNode }) 
       setFilters(EMPTY_FILTERS);
       setPreferences(DEFAULT_PREFERENCES);
       setLiveMetrics(ZERO_METRICS);
-      setFreeCommentsUsed(0);
+      setChecksRow(NO_CHECKS);
       setBonusChecks(0);
+      setAdsToday(0);
       setLastSyncedAt(null);
       setStatus('loading'); // the next user starts with skeletons, not the last one's data
       return;
@@ -278,7 +323,7 @@ export function ModerationProvider({ children }: { children: React.ReactNode }) 
     let cancelled = false;
     setStatus('loading');
     (async () => {
-      const [acc, flt, log, prof] = await Promise.all([
+      const [acc, flt, log, prof, ads] = await Promise.all([
         supabase.from('accounts').select(ACCOUNT_COLUMNS).eq('user_id', userId).order('created_at'),
         supabase
           .from('filters')
@@ -296,6 +341,10 @@ export function ModerationProvider({ children }: { children: React.ReactNode }) 
           .select(PROFILE_PREFS)
           .eq('id', userId)
           .maybeSingle(),
+        fetchAdsToday(userId).catch((e) => {
+          console.warn('Could not load ad rewards', e);
+          return 0;
+        }),
       ]);
       if (cancelled) return;
       const error = acc.error ?? flt.error ?? log.error ?? prof.error;
@@ -313,10 +362,11 @@ export function ModerationProvider({ children }: { children: React.ReactNode }) 
       if (prof.data) {
         const p = prof.data as ProfilePrefsRow;
         setNotificationsEnabledState(p.notifications_enabled);
-        setFreeCommentsUsed(p.free_comments_used);
+        setChecksRow({ used: p.free_comments_used, periodStart: p.free_period_start, joined: p.created_at });
         setBonusChecks(p.bonus_comment_checks ?? 0);
         setPreferences(toPreferences(p));
       }
+      setAdsToday(ads);
     })().catch((e) => {
       if (cancelled) return;
       console.warn('Could not load moderation data', e);
@@ -325,7 +375,7 @@ export function ModerationProvider({ children }: { children: React.ReactNode }) 
     refreshMetrics();
 
     // The backend's writes show up without a refresh: removed comments, the free-checks meter and
-    // checks earned by invites.
+    // checks earned by invites and rewarded ads.
     const channel = supabase
       .channel(`moderation:${userId}`)
       .on(
@@ -349,9 +399,17 @@ export function ModerationProvider({ children }: { children: React.ReactNode }) 
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${userId}` },
         (payload) => {
-          const row = payload.new as { free_comments_used?: number; bonus_comment_checks?: number };
-          if (typeof row.free_comments_used === 'number') setFreeCommentsUsed(row.free_comments_used);
-          if (typeof row.bonus_comment_checks === 'number') setBonusChecks(row.bonus_comment_checks);
+          const row = payload.new as Partial<ProfilePrefsRow>;
+          if (typeof row.free_comments_used === 'number') {
+            setChecksRow((c) => ({ ...c, used: row.free_comments_used!, periodStart: row.free_period_start ?? c.periodStart }));
+          }
+          if (typeof row.bonus_comment_checks === 'number') {
+            setBonusChecks((was) => {
+              // More extra checks: an invite or a rewarded ad landed; recount today's ads.
+              if (row.bonus_comment_checks! > was) fetchAdsToday(userId).then(setAdsToday).catch(() => {});
+              return row.bonus_comment_checks!;
+            });
+          }
         }
       )
       .subscribe();
@@ -408,6 +466,23 @@ export function ModerationProvider({ children }: { children: React.ReactNode }) 
   }, [allComments]);
 
   const metrics = isSupabaseConfigured ? liveMetrics : demoMetrics;
+
+  // The profile's count belongs to the month it was made in; a month that has since ended means
+  // nothing has been counted this month yet. Mirrors consume_comment_check() (supabase/migrations).
+  const freeChecks = useMemo<FreeChecks>(() => {
+    const joined = checksRow.joined ? new Date(checksRow.joined) : null;
+    const period = joined ? freePeriod(joined) : null;
+    const thisMonth = !period || (checksRow.periodStart !== null && new Date(checksRow.periodStart) >= period.start);
+    const used = thisMonth ? checksRow.used : 0;
+    return {
+      used,
+      allowance: FREE_CHECKS_PER_MONTH,
+      bonus: bonusChecks,
+      left: Math.max(0, FREE_CHECKS_PER_MONTH - used) + bonusChecks,
+      periodEnd: period?.end.toISOString() ?? null,
+      adsLeftToday: Math.max(0, AD_REWARDS_PER_DAY - adsToday),
+    };
+  }, [checksRow, bonusChecks, adsToday]);
 
   const connectAccount = useCallback(
     async (platform: Platform, returnPath: 'connect-accounts' | 'onboarding' = 'connect-accounts') => {
@@ -685,8 +760,8 @@ export function ModerationProvider({ children }: { children: React.ReactNode }) 
       concealed,
       notificationsEnabled,
       metrics,
-      freeCommentsUsed,
-      freeCommentAllowance: FREE_COMMENT_ALLOWANCE + bonusChecks,
+      freeChecks,
+      refreshFreeChecks,
       connectAccount,
       disconnectAccount,
       togglePause,
@@ -718,8 +793,8 @@ export function ModerationProvider({ children }: { children: React.ReactNode }) 
       concealed,
       notificationsEnabled,
       metrics,
-      freeCommentsUsed,
-      bonusChecks,
+      freeChecks,
+      refreshFreeChecks,
       connectAccount,
       disconnectAccount,
       togglePause,

@@ -5,10 +5,30 @@ import { PaidPlanId, Plan, PlanId } from '../types';
 // Limits are mirrored server-side in public.plan_limits (supabase/migrations).
 export const PAID_PLAN_COMMON_FEATURES = [
   'Unlimited comments moderated',
+  'No ads',
   '100+ languages',
   'All toxicity categories',
   'Custom keyword blocklist',
+  'Your full moderation log',
 ];
+
+// Comment checks a month on the Free plan; the count starts again on the monthly anniversary of
+// joining. Must match plan_limits.monthly_checks (supabase/migrations).
+export const FREE_CHECKS_PER_MONTH = 50;
+
+// Rewarded ads: each one watched adds AD_REWARD_CHECKS to the pool of extra checks, up to
+// AD_REWARDS_PER_DAY a day. Must match grant_ad_reward() (supabase/migrations).
+export const AD_REWARD_CHECKS = 5;
+export const AD_REWARDS_PER_DAY = 2;
+
+// How far back the log reaches on Free. Must match plan_limits.log_history_days.
+export const FREE_LOG_HISTORY_DAYS = 7;
+
+// Invites: a friend who joins with your code and connects an Instagram account nobody has
+// connected before earns you both INVITE_BONUS more checks, for up to MAX_INVITE_REWARDS
+// friends. Must match grant_invite_reward() (supabase/migrations).
+export const INVITE_BONUS = 5;
+export const MAX_INVITE_REWARDS = 3;
 
 export const PLANS: Plan[] = [
   {
@@ -17,13 +37,18 @@ export const PLANS: Plan[] = [
     maxAccounts: 1,
     keywordBlocklist: false,
     blockedUsers: false,
-    tagline: 'Try toxoff on one account',
+    ads: true,
+    logHistoryDays: FREE_LOG_HISTORY_DAYS,
+    tagline: 'toxoff on one account, free forever',
     features: [
       '1 Instagram account',
-      '20 free comment checks (shared with your trial)',
-      '5 more for each friend you invite (up to 3)',
+      `${FREE_CHECKS_PER_MONTH} comment checks a month`,
+      `Watch an ad for ${AD_REWARD_CHECKS} more, up to ${AD_REWARDS_PER_DAY} a day`,
+      `${INVITE_BONUS} more for each friend you invite (up to ${MAX_INVITE_REWARDS})`,
+      `Last ${FREE_LOG_HISTORY_DAYS} days of your log`,
       '100+ languages',
       'All toxicity categories',
+      'Shows ads',
     ],
   },
   {
@@ -32,6 +57,8 @@ export const PLANS: Plan[] = [
     maxAccounts: 1,
     keywordBlocklist: true,
     blockedUsers: false,
+    ads: false,
+    logHistoryDays: null,
     tagline: 'For one creator',
     features: [
       '1 Instagram account',
@@ -44,6 +71,8 @@ export const PLANS: Plan[] = [
     maxAccounts: 5,
     keywordBlocklist: true,
     blockedUsers: true,
+    ads: false,
+    logHistoryDays: null,
     popular: true,
     tagline: 'For creators running multiple accounts',
     features: [
@@ -59,6 +88,8 @@ export const PLANS: Plan[] = [
     maxAccounts: 15,
     keywordBlocklist: true,
     blockedUsers: true,
+    ads: false,
+    logHistoryDays: null,
     tagline: 'For managers and small agencies',
     features: [
       'Up to 15 Instagram accounts',
@@ -77,19 +108,27 @@ export function getPlan(id: PlanId): Plan {
   return PLANS.find((p) => p.id === id) ?? PLANS[0];
 }
 
-// Must match the trial length in handle_new_user() (supabase/migrations).
-export const TRIAL_DAYS = 7;
-
 // Hiding is the default. In the optional auto mode, toxic comments at this confidence are deleted for good.
 // Must match AUTO_DELETE_THRESHOLD in supabase/functions/api/moderation.ts.
 export const AUTO_DELETE_PERCENT = 80;
 
-// Comments an account can have checked without paying, across its trial and the Free
-// plan combined. Never resets. Must match consume_comment_check() (supabase/migrations).
-export const FREE_COMMENT_ALLOWANCE = 20;
+// The same day of the month, n months on; clamped to the month's end like Postgres (31 Jan + 1
+// month = 28 Feb, + 2 months = 31 Mar). Worked in UTC, as the server does.
+function addMonths(date: Date, n: number): Date {
+  const day = date.getUTCDate();
+  const first = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + n, 1,
+    date.getUTCHours(), date.getUTCMinutes(), date.getUTCSeconds(), date.getUTCMilliseconds()));
+  const lastDay = new Date(Date.UTC(first.getUTCFullYear(), first.getUTCMonth() + 1, 0)).getUTCDate();
+  first.setUTCDate(Math.min(day, lastDay));
+  return first;
+}
 
-// Invites: a friend who joins with your code and connects an Instagram account nobody has
-// connected before earns you both INVITE_BONUS more free checks, for up to MAX_INVITE_REWARDS
-// friends. Must match grant_invite_reward() (supabase/migrations).
-export const INVITE_BONUS = 5;
-export const MAX_INVITE_REWARDS = 3;
+/**
+ * The Free plan's current month: from the latest monthly anniversary of joining, to the next.
+ * Mirrors public.free_period_start() (supabase/migrations).
+ */
+export function freePeriod(joined: Date, now = new Date()): { start: Date; end: Date } {
+  let months = 0;
+  while (addMonths(joined, months + 1) <= now) months++;
+  return { start: addMonths(joined, months), end: addMonths(joined, months + 1) };
+}

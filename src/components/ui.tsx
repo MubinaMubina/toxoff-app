@@ -1,17 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import React from 'react';
-import {
-  ActivityIndicator,
-  Pressable,
-  StyleProp,
-  StyleSheet,
-  Text,
-  TextStyle,
-  View,
-  ViewStyle,
-} from 'react-native';
+import { ActivityIndicator, Pressable, StyleProp, StyleSheet, TextStyle, View, ViewStyle } from 'react-native';
+import { Text } from './AppText';
 import { useTheme } from '../theme/ThemeContext';
+import { BadgeTone, getSemanticColors, SemanticTone } from '../theme/colors';
 
 /* ---------------- Button ---------------- */
 
@@ -39,17 +32,17 @@ export function Button({
   style,
 }: ButtonProps) {
   const { colors, radius, font } = useTheme();
-  const heights = { lg: 54, md: 46, sm: 38 };
+  const heights = { lg: 56, md: 48, sm: 44 };
   const fonts = { lg: font.size.lg, md: font.size.md, sm: font.size.sm };
 
-  const bg = {
+  const bg = disabled ? colors.neutralSoft : {
     primary: colors.primary,
     secondary: colors.primarySoft,
     ghost: 'transparent',
     danger: colors.dangerSoft,
   }[variant];
 
-  const fg = {
+  const fg = disabled ? colors.neutral : {
     primary: colors.onPrimary,
     secondary: colors.primary,
     ghost: colors.primary,
@@ -81,9 +74,9 @@ export function Button({
           paddingHorizontal: 20,
           paddingVertical: 12,
           alignSelf: fullWidth ? 'stretch' : 'flex-start',
-          borderWidth: variant === 'ghost' ? 1 : 0,
+          borderWidth: variant === 'ghost' || variant === 'secondary' ? 1 : 0,
           borderColor: colors.border,
-          opacity: disabled ? 0.45 : pressed ? 0.85 : 1,
+          opacity: pressed && !disabled ? 0.85 : 1,
         },
         style,
       ]}
@@ -120,7 +113,7 @@ export function Card({
         {
           backgroundColor: colors.card,
           borderRadius: radius.lg,
-          borderWidth: StyleSheet.hairlineWidth,
+          borderWidth: 1,
           borderColor: colors.border,
           padding: padded ? 16 : 0,
         },
@@ -196,41 +189,47 @@ export function Badge({
   color,
   bg,
   icon,
+  tone = 'neutral',
 }: {
   label: string;
-  color: string;
-  bg: string;
+  tone?: BadgeTone;
+  color?: string;
+  bg?: string;
   icon?: keyof typeof Ionicons.glyphMap;
 }) {
-  const { font } = useTheme();
+  const { colors, font, radius } = useTheme();
+  const semantic = getSemanticColors(colors, tone);
+  const foreground = color ?? semantic.text;
   return (
     <View
       style={{
         flexDirection: 'row',
         alignItems: 'center',
         gap: 4,
-        backgroundColor: bg,
-        paddingHorizontal: 9,
+        backgroundColor: bg ?? semantic.background,
+        paddingHorizontal: 10,
         paddingVertical: 4,
-        borderRadius: 999,
+        borderRadius: radius.pill,
         alignSelf: 'flex-start',
+        maxWidth: '100%',
+        flexShrink: 1,
       }}
     >
-      {icon && <Ionicons name={icon} size={12} color={color} />}
-      <Text style={{ color, fontSize: font.size.xs, fontWeight: font.weight.semibold }}>
+      {icon && <Ionicons name={icon} size={13} color={foreground} accessible={false} />}
+      <Text style={{ color: foreground, fontSize: font.size.xs, fontWeight: font.weight.semibold, flexShrink: 1 }}>
         {label}
       </Text>
     </View>
   );
 }
 
-const REASON_TONE: Record<string, 'danger' | 'warning' | 'primary' | 'muted'> = {
+const REASON_TONE: Record<string, SemanticTone> = {
   hate_speech: 'danger',
   harassment: 'warning',
   slurs: 'danger',
-  spam: 'muted',
+  spam: 'info',
   self_harm: 'danger',
-  toxicity: 'primary',
+  toxicity: 'warning',
 };
 
 const REASON_TEXT: Record<string, string> = {
@@ -243,15 +242,7 @@ const REASON_TEXT: Record<string, string> = {
 };
 
 export function ReasonBadge({ reason }: { reason: string }) {
-  const { colors } = useTheme();
-  const tone = REASON_TONE[reason] ?? 'muted';
-  const map = {
-    danger: [colors.danger, colors.dangerSoft],
-    warning: [colors.warning, colors.warningSoft],
-    primary: [colors.primary, colors.primarySoft],
-    muted: [colors.textMuted, colors.surfaceAlt],
-  }[tone];
-  return <Badge label={REASON_TEXT[reason] ?? reason} color={map[0]} bg={map[1]} />;
+  return <Badge label={REASON_TEXT[reason] ?? reason} tone={REASON_TONE[reason] ?? 'neutral'} />;
 }
 
 /* ---------------- Text helpers ---------------- */
@@ -261,11 +252,11 @@ export function ScreenTitle({ title, subtitle }: { title: string; subtitle?: str
   const { colors, font } = useTheme();
   return (
     <View>
-      <Text style={{ color: colors.text, fontSize: font.size.huge, fontWeight: font.weight.heavy }}>
+      <Text accessibilityRole="header" style={{ color: colors.text, fontSize: font.size.huge, fontWeight: font.weight.semibold, letterSpacing: -1.4 }}>
         {title}
       </Text>
       {subtitle ? (
-        <Text style={{ color: colors.textMuted, fontSize: font.size.md, marginTop: 2 }}>{subtitle}</Text>
+        <Text style={{ color: colors.textMuted, fontSize: font.size.md, lineHeight: 23, marginTop: 6 }}>{subtitle}</Text>
       ) : null}
     </View>
   );
@@ -274,7 +265,7 @@ export function ScreenTitle({ title, subtitle }: { title: string; subtitle?: str
 export function H1({ children, style }: { children: React.ReactNode; style?: StyleProp<TextStyle> }) {
   const { colors, font } = useTheme();
   return (
-    <Text style={[{ color: colors.text, fontSize: font.size.xxl, fontWeight: font.weight.heavy }, style]}>
+    <Text accessibilityRole="header" style={[{ color: colors.text, fontSize: font.size.xxl, fontWeight: font.weight.semibold, letterSpacing: -1 }, style]}>
       {children}
     </Text>
   );
@@ -289,11 +280,11 @@ export function Muted({
 }) {
   const { colors, font } = useTheme();
   return (
-    <Text style={[{ color: colors.textMuted, fontSize: font.size.md }, style]}>{children}</Text>
+    <Text style={[{ color: colors.textMuted, fontSize: font.size.md, lineHeight: 24 }, style]}>{children}</Text>
   );
 }
 
-// A section's uppercase label, with an optional link ("Manage", "See all") on the same baseline.
+// A quiet section label, with an optional link on the same baseline.
 export function SectionLabel({
   children,
   action,
@@ -308,16 +299,17 @@ export function SectionLabel({
         flexDirection: 'row',
         alignItems: 'baseline',
         justifyContent: 'space-between',
+        flexWrap: 'wrap',
+        gap: 8,
         marginBottom: 10,
       }}
     >
       <Text
         style={{
           color: colors.textMuted,
-          fontSize: font.size.xs,
+          fontSize: font.size.sm,
           fontWeight: font.weight.semibold,
-          letterSpacing: 0.6,
-          textTransform: 'uppercase',
+          letterSpacing: 0.15,
         }}
       >
         {children}
@@ -352,6 +344,8 @@ export function Segmented<T extends string>({
         flexDirection: 'row',
         backgroundColor: colors.surfaceAlt,
         borderRadius: radius.md,
+        borderWidth: 1,
+        borderColor: colors.border,
         padding: 4,
         gap: 4,
       }}
@@ -377,11 +371,8 @@ export function Segmented<T extends string>({
               backgroundColor: active ? colors.card : 'transparent',
               alignItems: 'center',
               justifyContent: 'center',
-              shadowColor: '#000',
-              shadowOpacity: active ? 0.06 : 0,
-              shadowRadius: 4,
-              shadowOffset: { width: 0, height: 1 },
-              elevation: active ? 1 : 0,
+              borderWidth: 1,
+              borderColor: active ? colors.border : 'transparent',
             }}
           >
             <Text

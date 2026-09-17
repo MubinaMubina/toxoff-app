@@ -2,17 +2,8 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
-import {
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  ScrollView,
-  Switch,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, Switch, TextInput, View } from 'react-native';
+import { Text, useBodyFontFamily } from '../../src/components/AppText';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   Card,
@@ -62,6 +53,7 @@ const SENSITIVITY_HINT: Record<Sensitivity, string> = {
 
 export default function Filters() {
   const { colors, font, radius, spacing } = useTheme();
+  const fontFamily = useBodyFontFamily();
   const router = useRouter();
   const plan = getPlan(useAuth().subscription.plan);
   const {
@@ -128,7 +120,7 @@ export default function Filters() {
                 { label: 'High', value: 'high' },
               ]}
             />
-            <Text style={{ color: colors.textMuted, fontSize: font.size.sm, marginTop: 10, lineHeight: 19 }}>
+            <Text style={{ color: colors.info, fontSize: font.size.sm, marginTop: 10, lineHeight: 19 }}>
               {SENSITIVITY_HINT[filters.sensitivity]}
             </Text>
           </View>
@@ -157,8 +149,16 @@ export default function Filters() {
                     <Ionicons name={selected ? 'checkmark-circle' : 'ellipse-outline'} color={selected ? colors.primary : colors.textMuted} size={22} />
                     <View style={{ flex: 1 }}>
                       <Text style={{ color: colors.text, fontSize: font.size.md, fontWeight: font.weight.semibold }}>{option.label}</Text>
-                      <Text style={{ color: option.value === 'auto' ? colors.primary : colors.textMuted, fontSize: font.size.sm, marginTop: 3 }}>{option.note}</Text>
-                      {selected && <Text style={{ color: colors.textMuted, fontSize: font.size.sm, lineHeight: 19, marginTop: 8 }}>{ACTION_HINT[option.value]}</Text>}
+                      <Text style={{ color: option.value === 'hide' ? colors.info : colors.warning, fontSize: font.size.sm, marginTop: 3 }}>{option.note}</Text>
+                      {selected && (
+                        <View style={{
+                          backgroundColor: option.value === 'hide' ? colors.infoSoft : colors.warningSoft,
+                          borderColor: option.value === 'hide' ? colors.infoBorder : colors.warningBorder,
+                          borderWidth: 1, borderRadius: radius.md, padding: 12, marginTop: 8,
+                        }}>
+                          <Text style={{ color: option.value === 'hide' ? colors.info : colors.warning, fontSize: font.size.sm, lineHeight: 19 }}>{ACTION_HINT[option.value]}</Text>
+                        </View>
+                      )}
                     </View>
                   </Pressable>
                 );
@@ -188,12 +188,12 @@ export default function Filters() {
                           width: 32,
                           height: 32,
                           borderRadius: 9,
-                          backgroundColor: colors.surfaceAlt,
+                          backgroundColor: colors.infoSoft,
                           alignItems: 'center',
                           justifyContent: 'center',
                         }}
                       >
-                        <Ionicons name={c.icon} size={17} color={colors.primary} />
+                        <Ionicons name={c.icon} size={17} color={colors.info} />
                       </View>
                     </RowIcon>
                     <View style={{ flex: 1 }}>
@@ -212,8 +212,9 @@ export default function Filters() {
                         Haptics.selectionAsync().catch(() => {});
                         toggleCategory(c.key);
                       }}
-                      trackColor={{ false: colors.border, true: colors.primary }}
-                      thumbColor="#fff"
+                      trackColor={{ false: colors.switchOff, true: colors.switchOn }}
+                      ios_backgroundColor={colors.switchOff}
+                      thumbColor={colors.switchThumb}
                     />
                   </View>
                 </React.Fragment>
@@ -255,7 +256,7 @@ export default function Filters() {
                       placeholderTextColor={colors.textFaint}
                       autoCapitalize="none"
                       returnKeyType="done"
-                      style={{ color: colors.text, fontSize: font.size.md }}
+                      style={{ color: colors.text, fontFamily, fontSize: font.size.md }}
                     />
                   </View>
                   <AddButton label="Add blocked keyword" onPress={submitKeyword} />
@@ -305,7 +306,7 @@ export default function Filters() {
                       placeholderTextColor={colors.textFaint}
                       autoCapitalize="none"
                       returnKeyType="done"
-                      style={{ color: colors.text, fontSize: font.size.md, flex: 1, marginLeft: 2 }}
+                      style={{ color: colors.text, fontFamily, fontSize: font.size.md, flex: 1, marginLeft: 2 }}
                     />
                   </View>
                   <AddButton label="Add blocked user" onPress={submitUser} />
@@ -342,10 +343,10 @@ function LockedFeature({
     <Pressable accessibilityRole="button" accessibilityLabel={`${description} Available on ${availableOn}. Upgrade to unlock.`} onPress={onUpgrade}>
       {/* Icon on the first line of text, action under the text: reads top to bottom at any length. */}
       <Card style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 12 }}>
-        <Ionicons name="lock-closed" size={18} color={colors.primary} style={{ marginTop: 1 }} />
+        <Ionicons name="lock-closed" size={18} color={colors.info} style={{ marginTop: 1 }} />
         <View style={{ flex: 1 }}>
           <Text style={{ color: colors.text, fontSize: font.size.sm, lineHeight: 19 }}>{description}</Text>
-          <Text style={{ color: colors.textMuted, fontSize: font.size.xs, marginTop: 4, lineHeight: 17 }}>
+          <Text style={{ color: colors.info, fontSize: font.size.xs, marginTop: 4, lineHeight: 17 }}>
             Available on {availableOn}.
             {savedCount > 0 &&
               ` Your ${savedCount} saved ${savedNoun}${savedCount === 1 ? '' : 's'} will apply again when you upgrade.`}
@@ -414,14 +415,16 @@ function ChipList({
             flexDirection: 'row',
             alignItems: 'center',
             gap: 6,
-            backgroundColor: colors.primarySoft,
+            backgroundColor: colors.neutralSoft,
+            borderColor: colors.neutralBorder,
+            borderWidth: 1,
             paddingLeft: 12,
             paddingRight: 8,
             paddingVertical: 7,
             borderRadius: radius.pill,
           }}
         >
-          <Text style={{ color: colors.primary, fontSize: font.size.sm, fontWeight: font.weight.medium }}>
+          <Text style={{ color: colors.neutral, fontSize: font.size.sm, fontWeight: font.weight.medium }}>
             {item}
           </Text>
           <Pressable
@@ -430,7 +433,7 @@ function ChipList({
             accessibilityRole="button"
             accessibilityLabel={`Remove ${item}`}
           >
-            <Ionicons name="close-circle" size={17} color={colors.primary} />
+            <Ionicons name="close-circle" size={17} color={colors.neutral} />
           </Pressable>
         </View>
       ))}

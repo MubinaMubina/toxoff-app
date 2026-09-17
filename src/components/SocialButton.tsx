@@ -29,7 +29,9 @@ export function SocialButton({
       accessibilityRole="button"
       accessibilityLabel={label}
       style={({ pressed }) => ({
-        height: 54,
+        minHeight: 56,
+        paddingHorizontal: 16,
+        paddingVertical: 14,
         borderRadius: radius.md,
         borderWidth: border ? 1 : 0,
         borderColor: border,
@@ -46,7 +48,7 @@ export function SocialButton({
       ) : (
         <>
           {icon}
-          <Text style={{ color: foreground, fontSize: font.size.lg, fontWeight: font.weight.semibold }}>
+          <Text style={{ color: foreground, fontSize: font.size.lg, fontWeight: font.weight.semibold, flexShrink: 1, textAlign: 'center' }}>
             {label}
           </Text>
         </>

@@ -1,14 +1,16 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
-import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
+import { Alert, Pressable, ScrollView, View } from 'react-native';
+import { Text } from '../src/components/AppText';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { PlatformIcon } from '../src/components/PlatformIcon';
-import { Button, Card, H1, HeaderButton, Muted, RowSeparator } from '../src/components/ui';
+import { Badge, Button, Card, H1, HeaderButton, Muted, RowSeparator } from '../src/components/ui';
 import { useAuth } from '../src/context/AuthContext';
 import { useModeration } from '../src/context/ModerationContext';
 import { getPlan } from '../src/data/plans';
 import { useTheme } from '../src/theme/ThemeContext';
+import { getSemanticColors } from '../src/theme/colors';
 import { ConnectedAccount, Platform } from '../src/types';
 
 const PLATFORMS: Platform[] = ['instagram', 'tiktok'];
@@ -25,16 +27,16 @@ const LOGO_BOX = 38; // PlatformIcon's tile at LOGO_SIZE
 const COLUMN_GAP = 14;
 
 export default function ConnectAccounts() {
-  const { colors, font, spacing } = useTheme();
+  const { colors, font, spacing, radius } = useTheme();
   const router = useRouter();
-  const { accounts, status, connectAccount, disconnectAccount, togglePause, freeCommentsUsed, freeCommentAllowance } = useModeration();
+  const { accounts, status, connectAccount, disconnectAccount, togglePause, freeChecks } = useModeration();
   const { subscription } = useAuth();
   const [connecting, setConnecting] = useState<Platform | null>(null);
 
   const plan = getPlan(subscription.plan);
   const atLimit = accounts.length >= plan.maxAccounts;
   const anyConnected = accounts.some((a) => a.platform === 'instagram' && a.connected);
-  const outOfFreeChecks = !subscription.paying && freeCommentsUsed >= freeCommentAllowance;
+  const outOfFreeChecks = !subscription.paying && freeChecks.left <= 0;
 
   const connect = async (platform: Platform) => {
     if (platform !== 'instagram' || atLimit || connecting !== null) return;
@@ -71,8 +73,8 @@ export default function ConnectAccounts() {
       <ScrollView contentContainerStyle={{ flexGrow: 1, paddingHorizontal: spacing.gutter }}>
         <HeaderButton icon="close" label="Close" onPress={() => router.canGoBack() ? router.back() : router.replace('/(tabs)')} />
 
-        <H1 style={{ marginTop: 8 }}>Connect your accounts</H1>
-        <Muted style={{ marginTop: 6 }}>
+        <H1 style={{ marginTop: 8, fontWeight: font.weight.semibold, letterSpacing: -0.8 }}>Connect your accounts</H1>
+        <Muted style={{ marginTop: 8, lineHeight: 22 }}>
           toxoff needs access to moderate comments. You can disconnect anytime.
         </Muted>
 
@@ -80,16 +82,22 @@ export default function ConnectAccounts() {
           {PLATFORMS.map((platform) => {
             const linked = accounts.filter((a) => a.platform === platform);
             return (
-              <Card key={platform}>
+              <Card key={platform} style={{ borderWidth: 1, backgroundColor: platform === 'tiktok' ? colors.neutralSoft : colors.card, borderColor: platform === 'tiktok' ? colors.neutralBorder : colors.border }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: COLUMN_GAP }}>
                   <PlatformIcon platform={platform} size={LOGO_SIZE} withBackground />
                   <View style={{ flex: 1 }}>
                     <Text style={{ color: colors.text, fontSize: font.size.lg, fontWeight: font.weight.semibold }}>
                       {META[platform].name}
                     </Text>
-                    <Text style={{ color: colors.textMuted, fontSize: font.size.sm, marginTop: 2 }}>
-                      {META[platform].blurb}
-                    </Text>
+                    {platform === 'tiktok' ? (
+                      <View style={{ marginTop: 6, alignItems: 'flex-start' }}>
+                        <Badge label={META[platform].blurb} tone="neutral" icon="time-outline" />
+                      </View>
+                    ) : (
+                      <Text style={{ color: colors.textMuted, fontSize: font.size.sm, marginTop: 2 }}>
+                        {META[platform].blurb}
+                      </Text>
+                    )}
                   </View>
                 </View>
                 {platform === 'instagram' && (
@@ -107,6 +115,34 @@ export default function ConnectAccounts() {
                   const overLimit = accounts.indexOf(account) >= plan.maxAccounts;
                   const eligible = account.platform === 'instagram' && account.connected && !overLimit && !outOfFreeChecks;
                   const healthy = status === 'ready' && eligible && !account.paused;
+                  const accountTone = status !== 'ready' ? 'warning' : account.platform === 'tiktok' ? 'neutral' : healthy ? 'success' : 'warning';
+                  const accountColors = getSemanticColors(colors, accountTone);
+                  const accountLabel = status === 'loading'
+                    ? 'Checking status'
+                    : status === 'offline'
+                      ? 'Status unavailable'
+                      : account.platform === 'tiktok'
+                        ? 'Coming soon'
+                        : !account.connected
+                          ? 'Reconnect needed'
+                          : overLimit
+                            ? 'Plan limit reached'
+                            : outOfFreeChecks
+                              ? 'Free checks used up'
+                              : account.paused
+                                ? 'Paused'
+                                : 'Protection on';
+                  const accountIcon = status === 'loading'
+                    ? 'time-outline'
+                    : status === 'offline'
+                      ? 'cloud-offline-outline'
+                      : account.platform === 'tiktok'
+                        ? 'time-outline'
+                        : healthy
+                          ? 'checkmark-circle-outline'
+                          : status === 'ready' && eligible && account.paused
+                            ? 'pause-circle-outline'
+                            : 'alert-circle-outline';
                   const accountStatus = status === 'loading'
                     ? 'Checking account status…'
                     : status === 'offline'
@@ -128,18 +164,24 @@ export default function ConnectAccounts() {
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: COLUMN_GAP, paddingTop: 12 }}>
                         <View style={{ width: LOGO_BOX, alignItems: 'center' }}>
                           <Ionicons
-                            name={healthy ? 'checkmark-circle' : status === 'ready' && eligible && account.paused ? 'pause-circle' : 'alert-circle'}
+                            name={accountIcon}
                             size={20}
-                            color={healthy ? colors.primary : colors.textMuted}
+                            color={accountColors.text}
+                            accessible={false}
                           />
                         </View>
                         <View style={{ flex: 1 }}>
                           <Text style={{ color: colors.text, fontSize: font.size.md, fontWeight: font.weight.medium }}>
                             {account.handle}
                           </Text>
-                          <Text style={{ color: healthy ? colors.primary : colors.textMuted, fontSize: font.size.sm, marginTop: 4 }}>
-                            {accountStatus}
-                          </Text>
+                          <View style={{ marginTop: 6, alignItems: 'flex-start' }}>
+                            <Badge label={accountLabel} tone={accountTone} />
+                          </View>
+                          {status !== 'loading' && accountStatus !== accountLabel && (
+                            <Text style={{ color: colors.textMuted, fontSize: font.size.sm, marginTop: 6 }}>
+                              {accountStatus}
+                            </Text>
+                          )}
                         </View>
                       </View>
                       <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: 12, rowGap: 4, marginTop: 10, marginLeft: LOGO_BOX + COLUMN_GAP }}>
@@ -176,7 +218,7 @@ export default function ConnectAccounts() {
           })}
         </View>
 
-        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 16, paddingHorizontal: 2 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 20, paddingTop: 12, borderTopWidth: 1, borderTopColor: colors.border, paddingHorizontal: 2 }}>
           <Text style={{ color: colors.textMuted, fontSize: font.size.sm, flex: 1 }}>
             {accounts.length} of {plan.maxAccounts} account{plan.maxAccounts > 1 ? 's' : ''} used ·{' '}
             {plan.name} plan
@@ -202,15 +244,17 @@ export default function ConnectAccounts() {
               gap: 10,
               marginTop: 12,
               padding: 14,
-              backgroundColor: colors.primarySoft,
-              borderRadius: 14,
+              backgroundColor: colors.accentSoft,
+              borderWidth: 1,
+              borderColor: colors.accentBorder,
+              borderRadius: radius.sm,
             }}
           >
-            <Ionicons name="sparkles" size={18} color={colors.primary} />
-            <Text style={{ color: colors.primary, fontSize: font.size.sm, flex: 1, lineHeight: 19 }}>
+            <Ionicons name="sparkles-outline" size={18} color={colors.accentText} />
+            <Text style={{ color: colors.accentText, fontSize: font.size.sm, flex: 1, lineHeight: 20 }}>
               {plan.name} covers one account. Upgrade to Plus to moderate up to 5 Instagram accounts.
             </Text>
-            <Ionicons name="chevron-forward" size={16} color={colors.primary} />
+            <Ionicons name="chevron-forward" size={16} color={colors.accentText} />
           </Pressable>
         )}
 
@@ -220,12 +264,14 @@ export default function ConnectAccounts() {
             gap: 10,
             marginTop: 16,
             padding: 14,
-            backgroundColor: colors.surfaceAlt,
-            borderRadius: 14,
+            backgroundColor: colors.hero,
+            borderLeftWidth: 3,
+            borderLeftColor: colors.border,
+            borderRadius: radius.sm,
           }}
         >
-          <Ionicons name="lock-closed" size={18} color={colors.textMuted} />
-          <Text style={{ color: colors.textMuted, fontSize: font.size.sm, flex: 1, lineHeight: 19 }}>
+          <Ionicons name="lock-closed-outline" size={18} color={colors.textMuted} />
+          <Text style={{ color: colors.textMuted, fontSize: font.size.sm, flex: 1, lineHeight: 20 }}>
             toxoff can read, hide and restore comments, and delete them if you enable deletion.
             We never publish posts or access your DMs. You can disconnect anytime.
           </Text>

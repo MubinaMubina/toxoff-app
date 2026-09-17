@@ -1,6 +1,6 @@
 TOXOFF TERMS OF SERVICE
 
-Effective: 14 September 2026
+Effective: 16 September 2026
 
 These terms apply when you use the toxoff app. By creating an account you agree to them.
 Contact: support@toxoff.app
@@ -31,11 +31,12 @@ does not guarantee that every harmful comment will be caught.
 
 4. PLANS, FREE CHECKS AND INVITES
 
-- New accounts get a free trial, then the Free plan, which includes a limited number of free
-  comment checks in total.
-- Inviting friends can earn extra free checks, as described in the app. Invite rewards are for
-  real friends: we may remove rewards or suspend accounts that abuse them (for example, by using
-  fake accounts).
+- New accounts start on the Free plan, which includes a limited number of comment checks each
+  month, shows ads, and keeps a limited history in the moderation log.
+- Watching rewarded ads and inviting friends can earn extra checks, as described in the app.
+  Rewards are added only once Google confirms an ad was watched, and are limited per day. Invite
+  rewards are for real friends: we may remove rewards or suspend accounts that abuse them (for
+  example, by using fake accounts or interfering with ads).
 - We may change the free allowance or plan features in the future; changes will not reduce a
   subscription period you have already paid for.
 
@@ -46,7 +47,7 @@ does not guarantee that every harmful comment will be caught.
   to your Apple ID.
 - A subscription renews automatically at the end of each period unless you cancel at least 24
   hours before it ends. Manage or cancel it in your App Store account settings.
-- Subscribing during the free trial starts the paid plan immediately.
+- Subscribing starts the paid plan immediately and removes ads.
 - Refunds are handled by Apple under Apple's policies.
 
 

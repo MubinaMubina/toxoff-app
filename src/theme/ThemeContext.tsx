@@ -27,7 +27,7 @@ const ThemeContext = createContext<ThemeValue | undefined>(undefined);
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const system = useSystemScheme();
-  const [pref, setPrefState] = useState<ThemePref>('system');
+  const [pref, setPrefState] = useState<ThemePref>('light');
 
   useEffect(() => {
     AsyncStorage.getItem(STORAGE_KEY).then((v) => {

@@ -1,24 +1,18 @@
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
-import {
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  ScrollView,
-  Text,
-  View,
-} from 'react-native';
+import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from 'react-native';
+import { Text } from '../../src/components/AppText';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { LogoMark } from '../../src/components/Logo';
+import { LogoMark, Wordmark } from '../../src/components/Logo';
 import { SocialSignInButtons } from '../../src/components/SocialSignInButtons';
 import { TextField } from '../../src/components/TextField';
-import { Button, H1, HeaderButton, Muted } from '../../src/components/ui';
+import { Button, H1, HeaderButton } from '../../src/components/ui';
 import { useAuth } from '../../src/context/AuthContext';
+import { FREE_CHECKS_PER_MONTH } from '../../src/data/plans';
 import { useTheme } from '../../src/theme/ThemeContext';
 
 export default function SignUp() {
-  const { colors, font, spacing } = useTheme();
+  const { colors, font, spacing, radius } = useTheme();
   const router = useRouter();
   const { signUp } = useAuth();
 
@@ -40,12 +34,12 @@ export default function SignUp() {
       if (needsConfirmation) {
         Alert.alert(
           'Confirm your email',
-          `We sent a link to ${email.trim()}. Open it to activate your account, then log in — your 7-day trial starts right away.`
+          `We sent a link to ${email.trim()}. Open it to activate your account, then log in to set up toxoff.`
         );
         router.replace('/(auth)/login');
         return;
       }
-      router.replace('/(auth)/trial-started');
+      router.replace('/onboarding');
     } catch (e: any) {
       setError(e?.message ?? 'Could not create account.');
     } finally {
@@ -62,15 +56,19 @@ export default function SignUp() {
         >
           <HeaderButton icon="chevron-back" label="Back" onPress={() => router.back()} />
 
-          <View style={{ marginTop: 8 }}>
-            <LogoMark size={52} />
+          <View style={{ marginHorizontal: -spacing.gutter, paddingHorizontal: spacing.gutter, paddingTop: 16, paddingBottom: 20, backgroundColor: colors.hero, borderBottomWidth: 1, borderBottomColor: colors.border }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <LogoMark size={32} />
+              <Wordmark size={28} />
+            </View>
+            <H1 style={{ marginTop: 16 }}>Create your account</H1>
           </View>
-          <H1 style={{ marginTop: 18 }}>Create your account</H1>
-          <Muted style={{ marginTop: 6 }}>
-            Try Plus free for 7 days with 20 free comment checks. No card needed.
-          </Muted>
 
-          <View style={{ gap: 14, marginTop: 28 }}>
+          <View style={{ marginTop: 20, padding: 12, borderRadius: radius.md, backgroundColor: colors.accentSoft, borderWidth: 1, borderColor: colors.accentBorder }}>
+            <Text style={{ color: colors.accentText, fontSize: font.size.md, lineHeight: 22 }}>Free forever · {FREE_CHECKS_PER_MONTH} comment checks a month.{'\n'}No card needed. No automatic charge.</Text>
+          </View>
+
+          <View style={{ gap: 16, marginTop: 20 }}>
             <TextField
               label="Name"
               icon="person-outline"
@@ -99,14 +97,14 @@ export default function SignUp() {
             />
 
             {error && (
-              <Text style={{ color: colors.danger, fontSize: font.size.sm }}>{error}</Text>
+              <Text accessibilityRole="alert" style={{ color: colors.danger, fontSize: font.size.sm }}>{error}</Text>
             )}
 
-            <Button label="Start free trial" onPress={submit} loading={loading} style={{ marginTop: 4 }} />
+            <Button label="Create account" onPress={submit} loading={loading} style={{ marginTop: 4 }} />
 
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginVertical: 6 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginVertical: 4 }}>
               <View style={{ flex: 1, height: 1, backgroundColor: colors.border }} />
-              <Text style={{ color: colors.textFaint, fontSize: font.size.sm }}>or</Text>
+              <Text style={{ color: colors.textMuted, fontSize: font.size.sm }}>or</Text>
               <View style={{ flex: 1, height: 1, backgroundColor: colors.border }} />
             </View>
 
@@ -115,11 +113,11 @@ export default function SignUp() {
 
           <View style={{ flex: 1 }} />
 
-          <View style={{ flexDirection: 'row', justifyContent: 'center', marginTop: 24 }}>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center', marginTop: 24, columnGap: 4 }}>
             <Text style={{ color: colors.textMuted, fontSize: font.size.md }}>
               Already have an account?{' '}
             </Text>
-            <Pressable onPress={() => router.replace('/(auth)/login')}>
+            <Pressable accessibilityRole="button" onPress={() => router.replace('/(auth)/login')} style={{ minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' }}>
               <Text style={{ color: colors.primary, fontSize: font.size.md, fontWeight: font.weight.semibold }}>
                 Log in
               </Text>

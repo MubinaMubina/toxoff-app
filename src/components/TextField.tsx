@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import React, { useState } from 'react';
-import { Pressable, Text, TextInput, TextInputProps, View } from 'react-native';
+import { Pressable, TextInput, TextInputProps, View } from 'react-native';
+import { Text, useBodyFontFamily } from './AppText';
 import { useTheme } from '../theme/ThemeContext';
 
 type Props = TextInputProps & {
@@ -11,6 +12,7 @@ type Props = TextInputProps & {
 
 export function TextField({ label, icon, isPassword, ...props }: Props) {
   const { colors, radius, font } = useTheme();
+  const fontFamily = useBodyFontFamily();
   const [focused, setFocused] = useState(false);
   const [hidden, setHidden] = useState(true);
 
@@ -25,10 +27,10 @@ export function TextField({ label, icon, isPassword, ...props }: Props) {
         style={{
           flexDirection: 'row',
           alignItems: 'center',
-          backgroundColor: colors.surfaceAlt,
+          backgroundColor: colors.card,
           borderRadius: radius.md,
           borderWidth: 1.5,
-          borderColor: focused ? colors.primary : 'transparent',
+          borderColor: focused ? colors.primary : colors.border,
           paddingHorizontal: 14,
           minHeight: 52,
           gap: 10,
@@ -41,7 +43,7 @@ export function TextField({ label, icon, isPassword, ...props }: Props) {
           secureTextEntry={isPassword && hidden}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
-          style={{ flex: 1, color: colors.text, fontSize: font.size.md, minHeight: 52, paddingVertical: 12 }}
+          style={{ flex: 1, color: colors.text, fontFamily, fontSize: font.size.md, minHeight: 52, paddingVertical: 12 }}
           {...props}
         />
         {isPassword && (

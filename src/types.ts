@@ -71,6 +71,8 @@ export type Plan = {
   maxAccounts: number;
   keywordBlocklist: boolean;
   blockedUsers: boolean;
+  ads: boolean; // the app shows ads on this plan
+  logHistoryDays: number | null; // how far back the log reaches; null = all of it
   popular?: boolean;
   tagline: string;
   features: string[];

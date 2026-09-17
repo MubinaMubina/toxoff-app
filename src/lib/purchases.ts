@@ -23,6 +23,8 @@ export const storeConfigured = Platform.OS === 'ios' && !inExpoGo && Boolean(IOS
 export const productId = (plan: PaidPlanId, interval: BillingInterval) => `toxoff_${plan}_${interval}`;
 
 let configured = false;
+/** Whether RevenueCat is set up for a user (so its ad tracker can be used, src/lib/ads.ts). */
+export const purchasesConfigured = () => configured;
 
 /** Signs RevenueCat in as the toxoff user; null when they sign out. */
 export async function identifyPurchaser(userId: string | null): Promise<void> {

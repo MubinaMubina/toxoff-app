@@ -14,7 +14,6 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { TRIAL_DAYS } from '../data/plans';
 import { identifyPurchaser } from '../lib/purchases';
 import {
   isVerifiedRecoverySession,
@@ -51,10 +50,9 @@ export type Billing = {
 
 export type Subscription = {
   plan: PlanId; // what the user can use right now
-  status: 'trialing' | 'active' | 'free';
-  trialEndsAt: string | null; // ISO
+  status: 'active' | 'free';
   billing: Billing | null;
-  paying: boolean; // comments aren't counted against the free checks
+  paying: boolean; // comments aren't counted against the free checks, and no ads
 };
 
 // null = the user closed the sign-in sheet; isNew = the account was just created.
@@ -81,13 +79,12 @@ type AuthValue = {
 };
 
 const PROFILE_COLUMNS =
-  'plan, trial_ends_at, sub_status, billing_status, billing_plan, billing_interval, billing_period_end, billing_cancel_at_period_end, billing_store, onboarded_at';
+  'plan, sub_status, billing_status, billing_plan, billing_interval, billing_period_end, billing_cancel_at_period_end, billing_store, onboarded_at';
 
 type ProfileRow = {
   onboarded_at: string | null;
   plan: PlanId | null;
-  trial_ends_at: string | null;
-  sub_status: 'trialing' | 'active' | 'none' | null;
+  sub_status: 'active' | 'none' | null;
   billing_status: 'none' | Billing['status'];
   billing_plan: PaidPlanId | null;
   billing_interval: BillingInterval | null;
@@ -96,10 +93,10 @@ type ProfileRow = {
   billing_store: Billing['store'];
 };
 
-const FREE: Subscription = { plan: 'free', status: 'free', trialEndsAt: null, billing: null, paying: false };
+const FREE: Subscription = { plan: 'free', status: 'free', billing: null, paying: false };
 
-// How long a plan chosen during the trial holds after the trial ends while Stripe hasn't reported
-// the first charge yet. Must match effective_plan() (supabase/migrations).
+// Stripe only (dormant): how long a chosen plan holds while Stripe hasn't reported the first
+// charge yet. Must match effective_plan() (supabase/migrations).
 const SCHEDULED_GRACE_MS = 3 * 86_400_000;
 
 const AuthContext = createContext<AuthValue | undefined>(undefined);
@@ -123,18 +120,11 @@ function toSubscription(p: ProfileRow): Subscription {
     billing?.status === 'scheduled' &&
     billing.periodEnd !== null &&
     Date.parse(billing.periodEnd) > Date.now() - SCHEDULED_GRACE_MS;
-  const common = { trialEndsAt: p.trial_ends_at, billing, paying: p.sub_status === 'active' || scheduled };
+  const common = { billing, paying: p.sub_status === 'active' || scheduled };
   if (p.sub_status === 'active' && p.plan) {
     return { ...common, plan: p.plan, status: 'active' };
   }
-  const inTrial =
-    p.sub_status === 'trialing' &&
-    p.trial_ends_at !== null &&
-    new Date(p.trial_ends_at).getTime() > Date.now();
-  if (inTrial && p.plan) {
-    return { ...common, plan: p.plan, status: 'trialing' };
-  }
-  // Chosen during the trial, which has ended: the plan holds while Stripe reports the first charge.
+  // Stripe only: the chosen plan holds while Stripe reports the first charge.
   if (scheduled && billing) return { ...common, plan: billing.plan, status: 'active' };
   return { ...common, plan: 'free', status: 'free' };
 }
@@ -151,12 +141,6 @@ function toAppUser(u: User): AppUser {
     email: u.email ?? '',
     name: u.user_metadata?.full_name ?? u.user_metadata?.name ?? 'Creator',
   };
-}
-
-function demoTrial(plan: PlanId): Subscription {
-  const d = new Date();
-  d.setDate(d.getDate() + TRIAL_DAYS);
-  return { plan, trialEndsAt: d.toISOString(), status: 'trialing', billing: null, paying: false };
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -367,11 +351,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signUp = async (email: string, password: string, name: string) => {
     if (!isSupabaseConfigured) {
       setUser({ id: 'demo-user', email, name: name || 'Creator' });
-      setSubscription(demoTrial('plus'));
+      setSubscription(FREE);
       setOnboarded(false);
       return { needsConfirmation: false };
     }
-    // The handle_new_user trigger (supabase/migrations) creates the profile and starts the trial.
+    // The handle_new_user trigger (supabase/migrations) creates the profile, on Free.
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
@@ -390,10 +374,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (error) throw error;
   };
 
-  // Demo mode treats every social sign-in as a new account, so the trial flow is walkable.
+  // Demo mode treats every social sign-in as a new account, so the sign-up flow is walkable.
   const demoSocialSignIn = (email: string, name: string): SocialSignInResult => {
     setUser({ id: 'demo-user', email, name });
-    setSubscription(demoTrial('plus'));
+    setSubscription(FREE);
     setOnboarded(false);
     return { isNew: true };
   };

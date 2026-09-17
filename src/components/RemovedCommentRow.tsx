@@ -1,5 +1,6 @@
 import React from 'react';
-import { Text, View } from 'react-native';
+import { View } from 'react-native';
+import { Text } from './AppText';
 import { useTheme } from '../theme/ThemeContext';
 import { timeAgo } from '../lib/time';
 import { RemovedComment } from '../types';
@@ -16,8 +17,14 @@ export function RemovedCommentRow({ comment, concealed }: { comment: RemovedComm
         paddingVertical: 12,
         paddingHorizontal: LIST_ROW.inset,
         alignItems: 'flex-start',
+        backgroundColor: colors.filtered,
+        borderWidth: 1,
+        borderStyle: 'dashed',
+        borderColor: colors.filteredBorder,
+        borderRadius: 6,
       }}
     >
+      <Ionicons name={comment.action === 'deleted' ? 'trash-outline' : 'eye-off-outline'} size={19} color={colors.neutral} style={{ marginTop: 2 }} />
       <View style={{ flex: 1 }}>
         {concealed ? (
           // Removed for the user: they don't need to read it. The Log has it if they want to.
@@ -41,3 +48,4 @@ export function RemovedCommentRow({ comment, concealed }: { comment: RemovedComm
     </View>
   );
 }
+import { Ionicons } from '@expo/vector-icons';

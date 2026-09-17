@@ -5,7 +5,7 @@ export type ProtectionSummary = {
   title: string;
   description: string;
   activeCount: number;
-  tone: 'primary' | 'warning';
+  tone: 'success' | 'warning' | 'info';
   action: 'connect' | 'upgrade' | 'manage' | 'retry' | null;
 };
 
@@ -29,7 +29,7 @@ export function getProtectionSummary({
       title: 'Checking your protection',
       description: 'Getting the latest account status.',
       activeCount: 0,
-      tone: 'primary',
+      tone: 'warning',
       action: null,
     };
   }
@@ -52,7 +52,7 @@ export function getProtectionSummary({
       title: 'Connect Instagram to get protected',
       description: 'Connect your creator or business account to start checking comments.',
       activeCount: 0,
-      tone: 'primary',
+      tone: 'info',
       action: 'connect',
     };
   }
@@ -61,7 +61,7 @@ export function getProtectionSummary({
     return {
       kind: 'quota',
       title: 'Your free checks are used up',
-      description: 'New comments aren’t being checked. Upgrade to keep moderation running.',
+      description: 'New comments aren’t being checked. Watch an ad for more checks, or upgrade to keep moderation running.',
       activeCount: 0,
       tone: 'warning',
       action: 'upgrade',
@@ -124,7 +124,7 @@ export function getProtectionSummary({
     title: activeCount === 1 ? 'Your Instagram is protected' : 'Your Instagram accounts are protected',
     description: 'New comments are checked automatically using your filters.',
     activeCount,
-    tone: 'primary',
+    tone: 'success',
     action: null,
   };
 }

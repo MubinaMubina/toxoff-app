@@ -1,6 +1,6 @@
 TOXOFF PRIVACY POLICY
 
-Effective: 14 September 2026
+Effective: 16 September 2026
 
 toxoff ("toxoff", "we", "us") is an iPhone app that removes toxic and spam comments on your
 Instagram posts. This policy explains what information toxoff collects, why, who it is shared
@@ -36,8 +36,9 @@ Your settings
 - Whether you want push notifications, and your device's push notification token.
 
 Your plan and usage
-- Your plan (Free, Solo or Plus), trial dates, how many free comment checks you have used, and
-  any extra checks earned from invites.
+- Your plan (Free, Solo, Plus or Studio), how many comment checks you have used this month, and
+  any extra checks earned from invites or from watching ads (for each rewarded ad, the reward's
+  ID from Google and when it was watched).
 - Your invite codes and whether a friend used them.
 - If you subscribe: your plan, billing period, renewal date and subscription status, as reported
   by Apple through RevenueCat. Payments are handled by Apple. We never receive your card or
@@ -56,11 +57,22 @@ We use this information only to run toxoff:
 - to show you removed comments and let you restore hidden ones;
 - to send you a notification when a comment is removed (notifications do not include the
   comment's text);
-- to manage your trial, plan, free checks, invites and subscription;
-- to keep the service secure and prevent abuse of free checks and invites.
+- to manage your plan, free checks, invites, ad rewards and subscription;
+- to keep the service secure and prevent abuse of free checks, invites and ad rewards.
 
-We do not sell your information, we do not show ads, and we do not use your information or
-your commenters' comments for any purpose other than moderating your own posts.
+Ads on the Free plan
+- The Free plan shows ads, served by Google AdMob. Paid plans show none.
+- When you ask for extra checks by watching an ad, Google tells our server that the ad was
+  watched, together with your toxoff account ID, so the checks can be added to your account.
+- On iPhone, the app asks whether Google may track you across apps to make ads more relevant.
+  If you say no, you still get ads, just not personalised ones. You can change this any time in
+  your iPhone's Settings > Privacy & Security > Tracking. Where the law requires it, Google also
+  asks for your consent before showing ads.
+- Ad views, clicks and what an ad earned are reported to RevenueCat, next to subscription data,
+  without the content of any comment.
+
+We do not sell your information, and we do not use your information or your commenters'
+comments for any purpose other than moderating your own posts and running the service.
 
 
 3. WHO WE SHARE IT WITH
@@ -72,7 +84,11 @@ We use these service providers, only for the purposes above:
   to train OpenAI's models.
 - Meta (Instagram), to read, hide and delete comments on your posts through Instagram's
   official API.
-- Apple and RevenueCat, to process and verify subscriptions.
+- Apple and RevenueCat, to process and verify subscriptions, and RevenueCat to track ad revenue.
+- Google AdMob, to show ads on the Free plan and confirm rewarded ads. AdMob collects device
+  information and, if you allow tracking, an advertising identifier. See Google's privacy policy
+  (policies.google.com/privacy) and how Google uses data from partner apps
+  (policies.google.com/technologies/partner-sites).
 - Expo, to deliver push notifications.
 - Google and Apple, if you choose to sign in with them.
 

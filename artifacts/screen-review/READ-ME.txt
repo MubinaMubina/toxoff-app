@@ -1,0 +1,18 @@
+toxoff — iOS screen review
+
+Open index.html in your browser. Keep this folder and its images together;
+no installation or internet connection is needed.
+
+Click a screenshot to inspect it. Use Actual size for the original resolution,
+the arrow keys to browse, and Esc to close. You can also open each original PNG.
+Use the screen number when suggesting changes.
+
+This collection contains 32 original PNG screenshots, each 1206 × 2622 pixels.
+Captured on iPhone 17 Pro in the website-matched light theme using the app’s
+sample data. Long pages include additional scroll views. The screenshot
+image bytes have not been altered.
+
+Scope: a review of the app’s design matched to toxoff.app. Real provider login
+and purchase sheets, and verified password-reset completion states, are not
+captured. These images are a design preview, not evidence that those external
+flows have completed.

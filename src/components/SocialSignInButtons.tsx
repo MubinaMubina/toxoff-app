@@ -9,7 +9,7 @@ type Provider = 'google' | 'apple';
 
 const LABEL: Record<Provider, string> = { google: 'Google', apple: 'Apple' };
 
-// Works for both sign-up and log-in: new accounts see the trial screen, returning users go home.
+// Works for both sign-up and log-in: new accounts go to onboarding, returning users go home.
 export function SocialSignInButtons({ onError }: { onError: (message: string | null) => void }) {
   const router = useRouter();
   const { signInWithGoogle, signInWithApple } = useAuth();
@@ -23,7 +23,7 @@ export function SocialSignInButtons({ onError }: { onError: (message: string | n
       const result: SocialSignInResult =
         provider === 'google' ? await signInWithGoogle() : await signInWithApple();
       if (!result) return;
-      router.replace(result.isNew ? '/(auth)/trial-started' : '/'); // '/' sends unfinished onboarding there
+      router.replace(result.isNew ? '/onboarding' : '/'); // '/' sends unfinished onboarding there
     } catch (e: any) {
       onError(e?.message ?? `${LABEL[provider]} sign-in failed.`);
     } finally {

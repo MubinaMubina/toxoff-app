@@ -1,5 +1,6 @@
 import { billingReturn, cancel, portal, receiveStripeWebhook, subscribe, sync } from './billing.ts';
 import { deleteAccount } from './account.ts';
+import { receiveAdMobReward } from './ads.ts';
 import { eraseDeletedComments, restoreComment } from './comments.ts';
 import { finishConnect, instagramCallback, startConnect } from './connect.ts';
 import { dailySummary, refreshTokens } from './cron.ts';
@@ -54,6 +55,8 @@ export async function handle(req: Request): Promise<Response> {
         return await syncAppStore(req);
       case 'POST /webhooks/revenuecat':
         return await receiveRevenueCatWebhook(req);
+      case 'GET /webhooks/admob-ssv':
+        return await receiveAdMobReward(url);
       default:
         return json({ error: 'Not found.' }, 404);
     }

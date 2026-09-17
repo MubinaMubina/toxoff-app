@@ -1,14 +1,19 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import React, { useMemo, useState } from 'react';
-import { Alert, FlatList, LayoutAnimation, Pressable, Text, View } from 'react-native';
+import { Alert, FlatList, LayoutAnimation, Pressable, View } from 'react-native';
+import { Text } from '../../src/components/AppText';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { FilterChip } from '../../src/components/FilterChip';
 import { LogRow } from '../../src/components/LogRow';
 import { OfflineBanner, SkeletonLogRows } from '../../src/components/Skeleton';
+import { useRouter } from 'expo-router';
+import { AdSlot } from '../../src/components/AdSlot';
 import { Button, Card, EmptyState, ScreenTitle, Segmented } from '../../src/components/ui';
+import { useAuth } from '../../src/context/AuthContext';
 import { useModeration } from '../../src/context/ModerationContext';
 import { REASON_LABELS } from '../../src/data/mockData';
+import { getPlan } from '../../src/data/plans';
 import { DAY_MS } from '../../src/lib/time';
 import { useTheme } from '../../src/theme/ThemeContext';
 import { ModerationReason, Platform } from '../../src/types';
@@ -46,7 +51,10 @@ const REASONS: ModerationReason[] = [
 
 export default function Log() {
   const { colors, font, radius, spacing } = useTheme();
+  const router = useRouter();
+  const { subscription } = useAuth();
   const { status, reload, comments, concealed, restoreComment, eraseDeletedComments } = useModeration();
+  const historyDays = getPlan(subscription.plan).logHistoryDays;
 
   const [section, setSection] = useState<Section>('hidden');
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -274,6 +282,24 @@ export default function Log() {
               </View>
             </Card>
             )}
+          </>
+        }
+        ListFooterComponent={
+          <>
+            {historyDays !== null && status === 'ready' && (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Showing the last ${historyDays} days. Upgrade to keep your full history.`}
+                onPress={() => router.push('/paywall')}
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 6, padding: 14, backgroundColor: colors.hero, borderLeftWidth: 3, borderLeftColor: colors.border, borderRadius: radius.sm }}
+              >
+                <Ionicons name="time-outline" size={18} color={colors.textMuted} accessible={false} />
+                <Text style={{ color: colors.textMuted, fontSize: font.size.sm, flex: 1, lineHeight: 20 }}>
+                  Showing the last {historyDays} days. <Text style={{ color: colors.primary, fontWeight: font.weight.semibold }}>Upgrade</Text> to keep your full history.
+                </Text>
+              </Pressable>
+            )}
+            <AdSlot placement="log_banner" />
           </>
         }
         ListEmptyComponent={

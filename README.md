@@ -4,9 +4,10 @@
 
 toxoff is a mobile app that connects to a creator's Instagram accounts
 and uses AI to automatically detect and remove toxic, hateful, or harmful comments in
-any language. Creators sign up with email, Google, or Apple, get a 7-day Plus trial, then
-stay on a Free tier unless they subscribe in the app (Apple in-app purchase). TikTok is coming soon
-and cannot currently be connected.
+any language. Creators sign up with email, Google, or Apple and start on a free plan with ads (50
+comment checks a month, more for watching an ad or inviting a friend), and subscribe in the app
+(Apple in-app purchase) for unlimited, ad-free moderation. TikTok is coming soon and cannot
+currently be connected.
 
 Built with **Expo (React Native) + TypeScript**, **Supabase** (auth + database),
 **RevenueCat** (App Store subscriptions), and **Expo Notifications** (push alerts).
@@ -25,7 +26,7 @@ npx expo start            # press i (iOS), a (Android), or scan in Expo Go
 
 ### Demo mode
 With **no `.env` keys**, the app runs fully on **mock data** — no network calls. You can
-walk the entire flow (signup → trial → onboarding → dashboard → log → filters →
+walk the entire flow (signup → onboarding → dashboard → log → filters →
 paywall → settings) immediately. Auth, the moderation feed, and checkout are all
 simulated. Password reset email is unavailable in demo mode. Drop in real keys to go live.
 
@@ -38,7 +39,7 @@ app/                       # expo-router screens (file-based routing)
   _layout.tsx              # providers + root stack
   index.tsx                # auth/recovery redirect (→ splash, onboarding, reset password or tabs)
   splash.tsx               # onboarding / splash
-  (auth)/                  # login, signup, trial-started, forgot/reset password
+  (auth)/                  # login, signup, forgot/reset password
   onboarding.tsx           # Connect → Protection → Ready
   connect-accounts.tsx     # Instagram OAuth + account-limit gating; TikTok coming soon
   paywall.tsx              # subscription screen (App Store prices, restore purchases)
@@ -258,12 +259,23 @@ discount sells annual on the paywall, and annual users can't churn for a year. S
 Plus as the sensible middle choice. For Pakistan and India set lower custom storefront prices in
 App Store Connect rather than lowering the global price.
 
-Every new account starts with a **7-day Plus trial** (no card; the app runs it, not Apple) and moves
-to **Free** when it ends unless they subscribe. Subscribing during the trial starts the paid plan
-straight away. The trial and Free together get **20 free comment checks per account, ever, not
-per month**. Once they're used, comments stop being checked until the user subscribes or invites
-a friend. **Launch market: Pakistan.** Apple Pay isn't available there, but App Store purchases
-don't need it: Apple charges the card (or balance) on the user's Apple ID.
+There is no trial. Every new account starts on **Free**, for good, unless they subscribe
+(migration `20260916100000_freemium_ads.sql`, constants in `src/data/plans.ts`):
+- **50 comment checks a month**, counted from the monthly anniversary of the day they joined
+  (`consume_comment_check()`, `profiles.free_comments_used` + `free_period_start`;
+  `free_period_start()` and `freePeriod()` agree on the month).
+- A **pool of extra checks** (`profiles.bonus_comment_checks`) that never resets, spent after the
+  month's allowance: **+5 per rewarded ad** watched, **up to 2 ads a day** (see Ads below), and
+  **+5 per invited friend** (below).
+- The **log reaches back 7 days** (`plan_limits.log_history_days`, enforced by the `moderation_log`
+  policy through `log_visible_since()`; rows are kept, and `moderation_counts()` still counts them
+  for Home). Paid plans see everything.
+- **Ads** on Home and Log (`plan_limits.ads`). Paid plans show none.
+
+Once the checks are used, comments stop being checked until the month turns, an ad is watched, a
+friend joins, or the user subscribes. **Launch market: Pakistan.** Apple Pay isn't available
+there, but App Store purchases don't need it: Apple charges the card (or balance) on the user's
+Apple ID.
 
 **Invites** (`app/invite.tsx`, migration `20260914020000_invites.sql`):
 - Everyone has a single-use invite code: Settings → Invite friends, or the dashboard when the
@@ -301,7 +313,7 @@ app only reads it, live.
 | `POST /webhooks/revenuecat` | any RevenueCat event: re-read every toxoff user it names (including both sides of a transfer) |
 
 How it behaves:
-- **Buying** during the trial or on Free starts the plan now.
+- **Buying** on Free starts the plan now.
 - **Switching** between Solo, Plus and Studio, or monthly and annual, is another purchase in the
   same subscription group. Apple upgrades right away and downgrades at the next renewal.
 - **Cancelling, changing the card and refunds** happen in Apple's own settings. The app's
@@ -309,7 +321,7 @@ How it behaves:
 - **Cancelled** (`unsubscribe_detected_at`): the plan stays on until the period ends.
 - **Billing problem**: during Apple's grace period the plan stays on as `past_due`, and Settings
   says to update the payment method.
-- **Refunded or expired**: back to the rest of the trial, if any, else Free.
+- **Refunded or expired**: back to Free.
 - **Restore purchases** is on the paywall (required by the App Store).
 - In **Expo Go**, or without a RevenueCat key, purchases run in demo mode (a local pretend plan).
 
@@ -331,7 +343,8 @@ How it behaves:
    - URL: `https://sjfmcieunormozrybqmi.supabase.co/functions/v1/api/webhooks/revenuecat`
    - Authorization header: the value in the Keychain `supabase-toxoff-revenuecat-webhook-auth`
      (already set on the server as `REVENUECAT_WEBHOOK_AUTH`).
-   - Send both sandbox and production events.
+   - Production may receive both sandbox and production events; sandbox receipts do not grant
+     paid access by default. Production subscriptions take priority over sandbox subscriptions.
 5. Keys:
    - RevenueCat's **Apple public key** (`appl_…`) goes in `.env` as `EXPO_PUBLIC_REVENUECAT_IOS_KEY`.
    - Its **secret key** goes on the server:
@@ -339,6 +352,14 @@ How it behaves:
      `supabase-toxoff-revenuecat-secret`).
 6. Test with a development build (`eas build --profile development --platform ios`) and a
    sandbox tester from App Store Connect. Expo Go can't make real purchases.
+   Use an isolated test backend with the server setting `REVENUECAT_ALLOW_SANDBOX=true` to
+   enable sandbox entitlements. Leave this setting unset or `false` in production, including
+   when distributing TestFlight builds against production accounts.
+
+Security regressions run with `npm run test:security` (Deno, Node.js, and PostgreSQL binaries
+on `PATH`, or `PG_BIN` pointing at PostgreSQL's bin directory). The database tests create and
+stop a disposable local cluster; they do not use the linked Supabase project. See
+[`security-review-2026-09-16.md`](artifacts/security-review-2026-09-16.md) for findings and patches.
 
 ### Stripe (not used by the iOS app)
 
@@ -411,9 +432,11 @@ For the store build (can't be tried in Expo Go):
 
 ## Website (toxoff.app)
 
-`docs/` is the static site: home, `privacy.html`, `terms.html`, `support.html`,
-`delete-account.html`, a 404 page, `style.css` (the app's palette) and the icon files. The legal
-texts also live as plain text in `legal/`; keep the two in step. The app links to these pages
+`docs/` contains the older local website source: home, `privacy.html`, `terms.html`, `support.html`,
+`delete-account.html`, a 404 page, `style.css` and the icon files. The live toxoff.app redesign was
+the reference for the app's visual update; neither the live site nor these local website files
+were changed in that update. The legal texts also live as plain text in `legal/`; keep the two
+in step. The app links to these pages
 (`src/lib/links.ts`), and so should the Meta app dashboard, App Store Connect and the Google
 sign-in consent screen. It is hosted on GitHub Pages from a separate public repo (this one is
 private), with `docs/CNAME` naming the custom domain; DNS for the domain is at Namecheap.
@@ -427,9 +450,41 @@ offline. Log and Settings show skeleton placeholders (`src/components/Skeleton.t
 and keep showing them under an `OfflineBanner` (with Retry, which calls `reload()`) if the load
 failed before anything arrived. Data that did arrive stays on screen through a failed retry.
 
+### Ads (AdMob, reported to RevenueCat Ads)
+
+The Free plan shows ads; paid plans don't. Google AdMob serves them
+(`react-native-google-mobile-ads`, `src/lib/ads.ts`), and every load, impression, click, failure
+and paid event is sent to RevenueCat's ad tracker (`Purchases.adTracker`) so ad revenue shows next
+to subscriptions in RevenueCat. RevenueCat doesn't serve ads itself.
+
+- **Banner** (`src/components/AdSlot.tsx`): bottom of Home and Log. Renders nothing for paying
+  users, in Expo Go, or when no ad filled.
+- **Rewarded ad** (`useRewardedAd`, Home's checks meter): "Watch an ad for +5 checks". The app
+  asks Google to include the toxoff user id in its **server-side verification** callback
+  (`GET /webhooks/admob-ssv`, `supabase/functions/api/ads.ts`), which checks Google's ECDSA
+  signature against `https://www.gstatic.com/admob/reward/verifier-keys.json` and calls
+  `grant_ad_reward()`: +5 to `bonus_comment_checks`, once per `transaction_id`, at most 2 a day,
+  never for paying users. The app is never trusted to say an ad was watched; it just waits for
+  the profile to update (realtime) and re-reads it as a fallback.
+- **Consent and tracking**: before the first ad, Google's consent form where required (EEA), then
+  Apple's tracking prompt (`expo-tracking-transparency`). Declining just means non-personalised
+  ads.
+- **Setup**: the AdMob app id goes in `app.json` (the `react-native-google-mobile-ads` plugin;
+  set on 16 September 2026), the two ad unit ids in `.env`
+  (`EXPO_PUBLIC_ADMOB_BANNER_UNIT`, `EXPO_PUBLIC_ADMOB_REWARDED_UNIT`; blank = Google's test units
+  in development builds). In AdMob: an iOS app, a banner unit and a rewarded unit with server-side
+  verification pointed at `https://<project>.supabase.co/functions/v1/api/webhooks/admob-ssv`, and
+  impression-level ad revenue turned on (RevenueCat needs it). Put Google's `app-ads.txt` line on
+  toxoff.app, and link the AdMob app to the App Store listing once it exists. In RevenueCat, turn
+  on Ads for the project. Needs the EAS development build, like purchases; nothing ad-related runs
+  in Expo Go.
+- **Tests**: `supabase/functions/tests/ads_test.ts` (signature verification),
+  `scripts/freemium.test.cjs` (`npm run test:db`: the monthly allowance, the bonus pool, reward
+  limits, the 7-day log window, privileges).
+
 ## Onboarding
 
-After sign-up (`trial-started`), `app/onboarding.tsx` has three steps:
+After sign-up, `app/onboarding.tsx` has three steps:
 
 1. **Connect:** connect Instagram, or choose "Connect later." First setup saves reversible hiding
    before opening Instagram because moderation can begin as soon as an account is connected.
@@ -452,7 +507,8 @@ outside the plan limit, out of free checks, or unavailable offline. "Status upda
 successful app refresh, not a claim about the last Instagram comment scan. A single activity
 summary switches between the last 24 hours, 7 days and 30 days. Recent activity shows actions and
 reasons without comment text; users open the Log to review comments according to their visibility preference.
-Usage and trial details sit below protection and activity.
+The checks meter (this month's checks, extra ones, the rewarded-ad offer) and a banner ad sit
+below protection and activity on the Free plan.
 
 ## Password recovery
 
@@ -508,9 +564,11 @@ Also replace the placeholder `extra.eas.projectId` in `app.json` (set automatica
 `eas build:configure`). The store assets in `assets/` (icon, adaptive icon, splash, favicon,
 notification icon) are built from the master icon `assets/toxoff-icon-green-1024.png` by
 `npm run gen:assets`; to change the icon, replace that file and re-run it. The app's colours
-(`src/theme/colors.ts`) follow the icon: deep forest green `#13433B` is the brand colour (splash
-background, notification tint), with a mid green as the light-mode primary and a mint as the
-dark-mode primary so buttons and links keep their contrast.
+(`src/theme/colors.ts`) now match the live toxoff.app: warm paper `#FAFBF7`, sage `#EDF5E9`, forest
+`#173F35` and lavender `#E4DDF5`. Bundled Manrope runs through `src/components/AppText.tsx`; see
+[`assets/fonts/README.md`](assets/fonts/README.md) for font sources and licensing. Native layouts
+keep 20pt gutters, 8pt button corners and 14pt card corners. New installs default to light mode;
+saved theme choices are retained, with the same palette adapted for dark mode.
 
 > **Store review note:** Instagram API access and removing comments require
 > approved platform permissions and a public privacy policy. Have those ready before

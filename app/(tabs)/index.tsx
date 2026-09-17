@@ -2,18 +2,23 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
-import { Pressable, RefreshControl, ScrollView, Switch, Text, View } from 'react-native';
+import { Alert, Pressable, RefreshControl, ScrollView, Switch, View } from 'react-native';
+import { Text } from '../../src/components/AppText';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { AdSlot } from '../../src/components/AdSlot';
 import { PlatformIcon } from '../../src/components/PlatformIcon';
+import { LogoMark, Wordmark } from '../../src/components/Logo';
 import { RemovedCommentRow } from '../../src/components/RemovedCommentRow';
 import { Skeleton, SkeletonRows } from '../../src/components/Skeleton';
-import { Button, Card, LIST_ROW, RowIcon, RowSeparator, ScreenTitle, SectionLabel, Segmented } from '../../src/components/ui';
+import { Badge, Button, Card, LIST_ROW, RowIcon, RowSeparator, SectionLabel, Segmented } from '../../src/components/ui';
 import { useAuth } from '../../src/context/AuthContext';
 import { useModeration } from '../../src/context/ModerationContext';
-import { getPlan } from '../../src/data/plans';
+import { AD_REWARD_CHECKS, AD_REWARDS_PER_DAY, getPlan } from '../../src/data/plans';
+import { useRewardedAd } from '../../src/lib/ads';
 import { getProtectionSummary } from '../../src/lib/protection';
 import { shortDate, timeAgo } from '../../src/lib/time';
 import { useTheme } from '../../src/theme/ThemeContext';
+import { getSemanticColors } from '../../src/theme/colors';
 
 type Period = 'today' | 'week' | 'month';
 const PERIODS: { label: string; value: Period }[] = [
@@ -28,18 +33,46 @@ export default function Dashboard() {
   const { user, subscription } = useAuth();
   const {
     status, lastSyncedAt, reload, metrics, comments, accounts, togglePause,
-    freeCommentsUsed, freeCommentAllowance,
+    freeChecks, refreshFreeChecks,
   } = useModeration();
   const [period, setPeriod] = useState<Period>('today');
   const plan = getPlan(subscription.plan);
   const paid = subscription.paying;
-  const outOfFreeChecks = !paid && freeCommentsUsed >= freeCommentAllowance;
+  const outOfFreeChecks = !paid && freeChecks.left <= 0;
+  const rewarded = useRewardedAd(user?.id ?? null);
+
+  // Watching a rewarded ad: Google confirms the view to the backend, which adds the checks; the
+  // meter updates live when they land (and is re-read as a fallback).
+  const watchAd = async () => {
+    const outcome = await rewarded.watch();
+    if (outcome === 'demo') {
+      Alert.alert('Ads run in the App Store build', `There, watching a short ad adds ${AD_REWARD_CHECKS} comment checks, up to ${AD_REWARDS_PER_DAY} ads a day.`);
+    } else if (outcome === 'unavailable') {
+      Alert.alert('No ad available right now', 'Please try again in a little while.');
+    } else if (outcome === 'rewarded') {
+      Alert.alert('Thanks for watching', `${AD_REWARD_CHECKS} more checks are on their way. They show here in a moment.`);
+      setTimeout(() => refreshFreeChecks().catch(() => {}), 4000);
+    }
+  };
+  const monthLeft = Math.max(0, freeChecks.allowance - freeChecks.used);
   const summary = getProtectionSummary({ accounts, maxAccounts: plan.maxAccounts, outOfFreeChecks, status });
   const firstName = user?.name?.split(' ')[0] ?? 'Creator';
   const loading = status === 'loading';
   const activityUnavailable = status === 'offline' && !lastSyncedAt;
   const feed = comments.slice(0, 3);
-  const tone = summary.tone === 'warning' ? colors.warning : colors.primary;
+  const protectionColors = getSemanticColors(colors, summary.tone);
+  const usageColors = getSemanticColors(colors, outOfFreeChecks || activityUnavailable ? 'warning' : 'info');
+  const protectionIcon = summary.kind === 'active'
+    ? 'shield-checkmark-outline'
+    : summary.kind === 'paused'
+      ? 'pause-circle-outline'
+      : summary.kind === 'loading'
+        ? 'time-outline'
+        : summary.kind === 'offline'
+          ? 'cloud-offline-outline'
+          : summary.kind === 'unconnected'
+            ? 'information-circle-outline'
+            : 'alert-circle-outline';
   const action = summary.action;
   const handleAction = () => {
     if (action === 'retry') reload();
@@ -56,21 +89,26 @@ export default function Dashboard() {
         showsVerticalScrollIndicator={false}
       >
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
-          <View style={{ flex: 1 }}><ScreenTitle title="Home" subtitle={`Welcome back, ${firstName}.`} /></View>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Open settings"
-            onPress={() => router.push('/(tabs)/settings')}
-            style={({ pressed }) => ({ width: 44, height: 44, borderRadius: 22, backgroundColor: colors.primarySoft, alignItems: 'center', justifyContent: 'center', opacity: pressed ? 0.7 : 1 })}
-          >
-            <Ionicons name="settings-outline" size={22} color={colors.primary} />
-          </Pressable>
+          <View style={{ flex: 1, gap: 6 }}>
+            <Wordmark size={32} />
+            <Text style={{ color: colors.textMuted, fontSize: font.size.sm }}>Welcome back, {firstName}.</Text>
+          </View>
+          <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+            <LogoMark size={44} />
+          </View>
         </View>
 
-        <Card style={{ marginTop: spacing.xl, backgroundColor: summary.tone === 'warning' ? colors.warningSoft : colors.primarySoft, borderWidth: 0, padding: 20 }}>
-          <Ionicons name={summary.kind === 'active' ? 'shield-checkmark-outline' : summary.kind === 'paused' ? 'pause-circle-outline' : summary.tone === 'warning' ? 'alert-circle-outline' : 'shield-outline'} size={36} color={tone} />
-          <Text accessibilityRole="header" style={{ color: colors.text, fontSize: font.size.xxl, fontWeight: font.weight.bold, marginTop: 14 }}>{summary.title}</Text>
-          <Text style={{ color: colors.textMuted, fontSize: font.size.md, lineHeight: 22, marginTop: 8 }}>{summary.description}</Text>
+        <Card style={{ marginTop: spacing.xl, backgroundColor: protectionColors.background, borderColor: protectionColors.border, padding: 20 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <Ionicons name={protectionIcon} size={20} color={protectionColors.text} accessible={false} />
+            <Text style={{ color: protectionColors.text, fontSize: font.size.sm, fontWeight: font.weight.semibold, flexShrink: 1 }}>
+              {summary.kind === 'active' ? `${summary.activeCount} ${summary.activeCount === 1 ? 'account' : 'accounts'} protected` : 'Your protection'}
+            </Text>
+          </View>
+          <Text accessibilityRole="header" style={{ color: colors.text, fontSize: summary.kind === 'active' ? 32 : font.size.xxl, fontWeight: font.weight.semibold, letterSpacing: -1.3, marginTop: 14 }}>
+            {summary.kind === 'active' ? <>Your peace.{'\n'}<Text style={{ fontWeight: font.weight.heavy }}>Protected.</Text></> : summary.title}
+          </Text>
+          <Text style={{ color: colors.textMuted, fontSize: font.size.md, lineHeight: 24, marginTop: 10 }}>{summary.description}</Text>
           {loading ? <Skeleton height={12} width="60%" style={{ marginTop: 14 }} /> : lastSyncedAt && (
             <Text style={{ color: colors.textMuted, fontSize: font.size.sm, marginTop: 12 }}>Status updated {timeAgo(lastSyncedAt)}</Text>
           )}
@@ -81,19 +119,39 @@ export default function Dashboard() {
         </Card>
 
         {!loading && !paid && (
-          <Card style={{ marginTop: spacing.md, padding: 16 }}>
+          <Card style={{ marginTop: spacing.md, padding: 16, backgroundColor: usageColors.background, borderColor: usageColors.border }}>
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
               <Text style={{ color: colors.textMuted, fontSize: font.size.sm, flexShrink: 1 }}>
-                {subscription.status === 'trialing' && subscription.trialEndsAt ? `${plan.name} trial · ends ${shortDate(subscription.trialEndsAt)}` : 'Free plan'}
+                {freeChecks.periodEnd ? `Free plan · checks reset ${shortDate(freeChecks.periodEnd)}` : 'Free plan'}
               </Text>
-              <Pressable accessibilityRole="button" onPress={() => router.push('/paywall')} style={{ minHeight: 44, justifyContent: 'center', paddingHorizontal: 8 }}>
+              <Pressable accessibilityRole="button" accessibilityLabel="See plans" onPress={() => router.push('/paywall')} style={{ minHeight: 44, justifyContent: 'center', alignItems: 'center', flexDirection: 'row', gap: 6, paddingHorizontal: 8 }}>
                 <Text style={{ color: colors.primary, fontSize: font.size.sm, fontWeight: font.weight.semibold }}>See plans</Text>
+                <Ionicons name="arrow-up-outline" size={16} color={colors.primary} style={{ transform: [{ rotate: '45deg' }] }} accessible={false} />
               </Pressable>
             </View>
-            {!activityUnavailable && <View accessibilityRole="progressbar" accessibilityLabel="Free comment checks used" accessibilityValue={{ min: 0, max: freeCommentAllowance, now: Math.min(freeCommentsUsed, freeCommentAllowance) }} style={{ height: 5, borderRadius: radius.pill, backgroundColor: colors.surfaceAlt, overflow: 'hidden' }}>
-              <View style={{ width: `${Math.min(100, freeCommentsUsed / Math.max(1, freeCommentAllowance) * 100)}%`, height: '100%', backgroundColor: outOfFreeChecks ? colors.warning : colors.primary }} />
+            {!activityUnavailable && <View accessibilityRole="progressbar" accessibilityLabel="Comment checks used this month" accessibilityValue={{ min: 0, max: freeChecks.allowance, now: Math.min(freeChecks.used, freeChecks.allowance) }} style={{ height: 5, borderRadius: radius.pill, backgroundColor: usageColors.border, overflow: 'hidden' }}>
+              <View style={{ width: `${Math.min(100, freeChecks.used / Math.max(1, freeChecks.allowance) * 100)}%`, height: '100%', backgroundColor: usageColors.text }} />
             </View>}
-            <Text style={{ color: colors.text, fontSize: font.size.md, fontWeight: font.weight.semibold, marginTop: 10 }}>{activityUnavailable ? 'Usage unavailable' : `${freeCommentsUsed} of ${freeCommentAllowance} free checks used`}</Text>
+            <Text style={{ color: colors.text, fontSize: font.size.md, fontWeight: font.weight.semibold, marginTop: 10 }}>
+              {activityUnavailable
+                ? 'Usage unavailable'
+                : `${monthLeft} of ${freeChecks.allowance} checks left this month${freeChecks.bonus > 0 ? ` · +${freeChecks.bonus} extra` : ''}`}
+            </Text>
+            {!activityUnavailable && (freeChecks.adsLeftToday > 0 ? (
+              <Button
+                label={`Watch an ad for +${AD_REWARD_CHECKS} checks`}
+                icon="play-circle-outline"
+                variant="secondary"
+                size="md"
+                loading={rewarded.busy}
+                onPress={watchAd}
+                style={{ marginTop: 12 }}
+              />
+            ) : (
+              <Text style={{ color: colors.textMuted, fontSize: font.size.sm, marginTop: 10 }}>
+                Today's {AD_REWARDS_PER_DAY} ads watched. More checks tomorrow, or upgrade for unlimited.
+              </Text>
+            ))}
           </Card>
         )}
 
@@ -104,8 +162,10 @@ export default function Dashboard() {
               {accounts.map((account, index) => {
                 const unsupported = account.platform !== 'instagram';
                 const overLimit = index >= plan.maxAccounts;
-                const accountStatus = status !== 'ready' ? 'Status unavailable' : unsupported ? 'Coming soon' : !account.connected ? 'Reconnect needed' : overLimit ? `Outside your ${plan.name} limit` : outOfFreeChecks ? 'Free checks used up' : account.paused ? 'Paused' : 'Protection on';
+                const accountStatus = status === 'loading' ? 'Checking status' : status === 'offline' ? 'Status unavailable' : unsupported ? 'Coming soon' : !account.connected ? 'Reconnect needed' : overLimit ? `Outside your ${plan.name} limit` : outOfFreeChecks ? 'Free checks used up' : account.paused ? 'Paused' : 'Protection on';
                 const healthy = status === 'ready' && !unsupported && account.connected && !overLimit && !outOfFreeChecks && !account.paused;
+                const accountTone = status !== 'ready' ? 'warning' : unsupported ? 'neutral' : healthy ? 'success' : 'warning';
+                const accountIcon = status === 'loading' ? 'time-outline' : status === 'offline' ? 'cloud-offline-outline' : unsupported ? 'time-outline' : healthy ? 'checkmark-circle-outline' : account.paused && account.connected && !overLimit && !outOfFreeChecks ? 'pause-circle-outline' : 'alert-circle-outline';
                 return (
                   <React.Fragment key={account.id}>
                     {index > 0 && <RowSeparator />}
@@ -113,7 +173,9 @@ export default function Dashboard() {
                       <RowIcon><PlatformIcon platform={account.platform} size={17} withBackground /></RowIcon>
                       <View style={{ flex: 1 }}>
                         <Text style={{ color: colors.text, fontSize: font.size.md, fontWeight: font.weight.semibold }}>{account.handle}</Text>
-                        <Text style={{ color: healthy ? colors.primary : colors.textMuted, fontSize: font.size.sm, marginTop: 4 }}>{accountStatus}</Text>
+                        <View style={{ marginTop: 6, alignItems: 'flex-start' }}>
+                          <Badge label={accountStatus} tone={accountTone} icon={accountIcon} />
+                        </View>
                       </View>
                       {account.connected && !unsupported && !overLimit && !outOfFreeChecks ? (
                         <Switch
@@ -122,7 +184,9 @@ export default function Dashboard() {
                           value={!account.paused}
                           disabled={status !== 'ready'}
                           onValueChange={() => { Haptics.selectionAsync().catch(() => {}); togglePause(account.id); }}
-                          trackColor={{ false: colors.border, true: colors.primary }} thumbColor="#FFFFFF"
+                          trackColor={{ false: colors.switchOff, true: colors.switchOn }}
+                          thumbColor={colors.switchThumb}
+                          ios_backgroundColor={colors.switchOff}
                         />
                       ) : (
                         <Pressable accessibilityRole="button" accessibilityLabel={`Manage ${account.handle}`} onPress={() => router.push('/connect-accounts')} style={{ minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' }}>
@@ -161,17 +225,15 @@ export default function Dashboard() {
               </Text>
             </View>
           ) : (
-            <Card padded={false}>
-              {feed.map((comment, index) => (
-                <React.Fragment key={comment.id}>
-                  {index > 0 && <RowSeparator inset={16} />}
-                  <RemovedCommentRow comment={comment} concealed />
-                </React.Fragment>
+            <View style={{ gap: 10 }}>
+              {feed.map((comment) => (
+                <RemovedCommentRow key={comment.id} comment={comment} concealed />
               ))}
-            </Card>
+            </View>
           )}
         </View>
 
+        <AdSlot placement="home_banner" />
       </ScrollView>
     </SafeAreaView>
   );

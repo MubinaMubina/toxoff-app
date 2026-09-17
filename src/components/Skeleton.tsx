@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useRef } from 'react';
-import { Animated, DimensionValue, Pressable, StyleProp, Text, View, ViewStyle } from 'react-native';
+import { Animated, DimensionValue, Pressable, StyleProp, View, ViewStyle } from 'react-native';
+import { Text } from './AppText';
 import { useTheme } from '../theme/ThemeContext';
 import { Card, LIST_ROW, RowSeparator } from './ui';
 

@@ -1,12 +1,13 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, ScrollView, Text, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, ScrollView, useWindowDimensions, View } from 'react-native';
+import { Text } from '../src/components/AppText';
 import type { PurchasesPackage } from 'react-native-purchases';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button, H1, HeaderButton } from '../src/components/ui';
 import { useAuth } from '../src/context/AuthContext';
-import { getPlan, PAID_PLAN_COMMON_FEATURES, PAID_PLANS } from '../src/data/plans';
+import { FREE_CHECKS_PER_MONTH, getPlan, PAID_PLAN_COMMON_FEATURES, PAID_PLANS } from '../src/data/plans';
 import {
   annualSavings,
   formatUsd,
@@ -58,10 +59,6 @@ export default function Paywall() {
   }, [loadPrices, user?.id]);
 
   const selectedName = getPlan(selected).name;
-  const trialEnd =
-    subscription.status === 'trialing' && subscription.trialEndsAt
-      ? shortDate(subscription.trialEndsAt)
-      : null;
   const cancelling = billing?.cancelAtPeriodEnd ?? false;
   // The plan the user pays for, if any.
   const paidPlan = billing?.plan ?? (subscription.status === 'active' ? subscription.plan : null);
@@ -77,18 +74,14 @@ export default function Paywall() {
         ? `Switch to ${interval} billing`
         : paidPlan
           ? `Switch to ${selectedName}`
-          : trialEnd
-            ? `Start ${selectedName} now`
-            : `Upgrade to ${selectedName}`;
+          : `Upgrade to ${selectedName}`;
 
   const subtitle =
-    trialEnd && !paidPlan
-      ? `Your free trial ends ${trialEnd}. Subscribing ends it early and starts your plan today.`
-      : cancelling && billing?.periodEnd
-        ? `Your ${getPlan(billing.plan).name} plan ends ${shortDate(billing.periodEnd)}. Choose a plan to keep going.`
-        : subscription.status === 'free'
-          ? 'Unlimited moderation, more accounts, and custom rules. Cancel anytime.'
-          : 'Change your plan anytime.';
+    cancelling && billing?.periodEnd
+      ? `Your ${getPlan(billing.plan).name} plan ends ${shortDate(billing.periodEnd)}. Choose a plan to keep going.`
+      : subscription.status === 'free'
+        ? 'Unlimited moderation, no ads, more accounts, and custom rules. Cancel anytime.'
+        : 'Change your plan anytime.';
 
   const priceOf = (plan: PaidPlanId) => {
     const product = packages.get(productId(plan, interval))?.product;
@@ -198,9 +191,7 @@ export default function Paywall() {
             : 'This plan is currently unavailable in the App Store.'
           : onSelected && cancelling
             ? 'Manage renewal in your App Store settings.'
-            : trialEnd && !paidPlan
-              ? 'Starts today and ends your free trial. Renews automatically.'
-              : `Billed ${interval === 'annual' ? 'yearly' : 'monthly'}. Renews automatically. Cancel anytime.`}
+            : `Billed ${interval === 'annual' ? 'yearly' : 'monthly'}. Renews automatically. Cancel anytime.`}
       </Text>
       <Button
         label={needsStorePrice && !isCurrentPlan ? (pricesLoading ? 'Loading price…' : 'Retry App Store prices') : ctaLabel}
@@ -234,12 +225,14 @@ export default function Paywall() {
         showsVerticalScrollIndicator={false}
       >
         <HeaderButton icon="close" label="Close" onPress={() => router.back()} />
-        <H1 style={{ marginTop: 8 }}>Choose your protection</H1>
-        <Text style={{ color: colors.textMuted, fontSize: font.size.md, marginTop: 6 }}>
-          {subtitle}
-        </Text>
+        <H1 style={{ marginTop: 8, fontWeight: font.weight.semibold, letterSpacing: -0.8 }}>Choose your protection</H1>
+        <View style={{ marginTop: 8 }}>
+          <Text style={{ color: colors.textMuted, fontSize: font.size.md, lineHeight: 22 }}>
+            {subtitle}
+          </Text>
+        </View>
 
-        <View accessibilityRole="radiogroup" accessibilityLabel="Billing period" style={{ flexDirection: 'row', gap: 4, padding: 4, backgroundColor: colors.surfaceAlt, borderRadius: radius.md, marginTop: 20 }}>
+        <View accessibilityRole="radiogroup" accessibilityLabel="Billing period" style={{ flexDirection: 'row', gap: 4, padding: 4, backgroundColor: colors.hero, borderWidth: 1, borderColor: colors.border, borderRadius: radius.sm, marginTop: 20 }}>
           {(['monthly', 'annual'] as const).map((value) => (
             <Pressable
               key={value}
@@ -272,7 +265,7 @@ export default function Paywall() {
                 accessibilityLabel={`${plan.name}. ${accountLabel}. ${price.amount} ${price.unit}${price.note ? `. ${price.note}` : ''}${paidPlan === plan.id ? '. Current plan' : ''}`}
                 style={({ pressed }) => ({
                   flexDirection: 'row', alignItems: 'center', gap: 12,
-                  borderRadius: radius.lg, borderWidth: 2,
+                  borderRadius: radius.lg, borderWidth: 1,
                   borderColor: active ? colors.primary : colors.border,
                   backgroundColor: active ? colors.primarySoft : colors.card,
                   padding: 14, opacity: pressed ? 0.8 : 1,
@@ -303,7 +296,7 @@ export default function Paywall() {
           })}
         </View>
 
-        <View style={{ marginTop: 22, gap: 10 }}>
+        <View style={{ marginTop: 22, paddingTop: 20, borderTopWidth: 1, borderTopColor: colors.border, gap: 12 }}>
           <Text accessibilityRole="header" style={{ color: colors.text, fontSize: font.size.lg, fontWeight: font.weight.semibold }}>
             Included in every plan
           </Text>
@@ -313,8 +306,9 @@ export default function Paywall() {
               <Text style={{ color: colors.text, fontSize: font.size.md, flex: 1 }}>{feature}</Text>
             </View>
           ))}
-          <Text style={{ color: colors.textMuted, fontSize: font.size.sm }}>
-            Plus and Studio also include a blocked users list and priority support.
+          <Text style={{ color: colors.textMuted, fontSize: font.size.sm, lineHeight: 20, marginTop: 2 }}>
+            Plus and Studio also include a blocked users list and priority support. Free stays free:
+            {' '}{FREE_CHECKS_PER_MONTH} checks a month on one account, with ads.
           </Text>
         </View>
 
@@ -338,7 +332,7 @@ export default function Paywall() {
         {!stickyPurchase && purchaseControls}
       </ScrollView>
       {stickyPurchase && (
-        <View style={{ paddingHorizontal: spacing.gutter, borderTopWidth: 0.5, borderTopColor: colors.border }}>
+        <View style={{ paddingHorizontal: spacing.gutter, backgroundColor: colors.hero, borderTopWidth: 1, borderTopColor: colors.border }}>
           {purchaseControls}
         </View>
       )}

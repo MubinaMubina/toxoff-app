@@ -1,15 +1,16 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, Text, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, ScrollView, View } from 'react-native';
+import { Text } from '../../src/components/AppText';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { TextField } from '../../src/components/TextField';
-import { Button, Card, H1, HeaderButton, Muted } from '../../src/components/ui';
+import { Button, H1, HeaderButton, Muted } from '../../src/components/ui';
 import { useAuth } from '../../src/context/AuthContext';
 import { useTheme } from '../../src/theme/ThemeContext';
 
 export default function ForgotPassword() {
-  const { colors, font, spacing } = useTheme();
+  const { colors, font, spacing, radius } = useTheme();
   const router = useRouter();
   const params = useLocalSearchParams<{ email?: string }>();
   const { requestPasswordReset } = useAuth();
@@ -53,21 +54,23 @@ export default function ForgotPassword() {
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingHorizontal: spacing.gutter, paddingBottom: 32, flexGrow: 1 }}>
           <HeaderButton icon="chevron-back" label="Back to log in" onPress={() => router.replace('/(auth)/login')} />
-          <View style={{ width: 64, height: 64, borderRadius: 20, backgroundColor: colors.primarySoft, alignItems: 'center', justifyContent: 'center', marginTop: 12 }}>
-            <Ionicons name={sentTo ? 'mail-outline' : 'lock-open-outline'} size={30} color={colors.primary} />
+          <View style={{ marginHorizontal: -spacing.gutter, paddingHorizontal: spacing.gutter, paddingTop: 20, paddingBottom: 28, backgroundColor: colors.hero, borderBottomWidth: 1, borderBottomColor: colors.border }}>
+            <View style={{ width: 52, height: 52, borderRadius: radius.md, backgroundColor: sentTo ? colors.successSoft : colors.infoSoft, alignItems: 'center', justifyContent: 'center' }}>
+              <Ionicons name={sentTo ? 'mail-outline' : 'lock-open-outline'} size={27} color={sentTo ? colors.success : colors.info} accessible={false} />
+            </View>
+            <H1 style={{ marginTop: 22 }}>{sentTo ? 'Check your email.' : 'Let’s get you back in.'}</H1>
+            <Muted style={{ marginTop: 10 }}>
+              {sentTo ? `If an account exists for ${sentTo}, you’ll receive a password reset link shortly.` : 'Enter the email you use for toxoff. We’ll send you a link to choose a new password.'}
+            </Muted>
           </View>
-          <H1 style={{ marginTop: 20 }}>{sentTo ? 'Check your email' : 'Reset your password'}</H1>
-          <Muted style={{ marginTop: 8 }}>
-            {sentTo ? `If an account exists for ${sentTo}, you’ll receive a password reset link shortly.` : 'Enter the email you use for toxoff. We’ll send you a link to choose a new password.'}
-          </Muted>
 
           <View style={{ gap: 18, marginTop: 28 }}>
             {sentTo ? (
-              <Card>
-                <Text style={{ color: colors.text, fontSize: font.size.md, lineHeight: 23 }}>
+              <View style={{ padding: 16, borderRadius: radius.md, backgroundColor: colors.accentSoft, borderWidth: 1, borderColor: colors.accentBorder }}>
+                <Text style={{ color: colors.accentText, fontSize: font.size.md, lineHeight: 24 }}>
                   Open the newest link on this device. Check your spam folder if it hasn’t arrived.
                 </Text>
-              </Card>
+              </View>
             ) : (
               <TextField
                 label="Email"

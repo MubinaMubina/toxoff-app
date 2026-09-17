@@ -1,18 +1,12 @@
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
-import {
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  ScrollView,
-  Text,
-  View,
-} from 'react-native';
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from 'react-native';
+import { Text } from '../../src/components/AppText';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { LogoMark } from '../../src/components/Logo';
+import { LogoMark, Wordmark } from '../../src/components/Logo';
 import { SocialSignInButtons } from '../../src/components/SocialSignInButtons';
 import { TextField } from '../../src/components/TextField';
-import { Button, H1, HeaderButton, Muted } from '../../src/components/ui';
+import { Button, H1, HeaderButton } from '../../src/components/ui';
 import { useAuth } from '../../src/context/AuthContext';
 import { useTheme } from '../../src/theme/ThemeContext';
 
@@ -52,13 +46,15 @@ export default function Login() {
         >
           <HeaderButton icon="chevron-back" label="Back" onPress={() => router.back()} />
 
-          <View style={{ marginTop: 8 }}>
-            <LogoMark size={52} />
+          <View style={{ marginHorizontal: -spacing.gutter, paddingHorizontal: spacing.gutter, paddingTop: 16, paddingBottom: 20, backgroundColor: colors.hero, borderBottomWidth: 1, borderBottomColor: colors.border }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <LogoMark size={32} />
+              <Wordmark size={28} />
+            </View>
+            <H1 style={{ marginTop: 16 }}>Log in</H1>
           </View>
-          <H1 style={{ marginTop: 18 }}>Welcome back</H1>
-          <Muted style={{ marginTop: 6 }}>Log in to your toxoff dashboard.</Muted>
 
-          <View style={{ gap: 14, marginTop: 28 }}>
+          <View style={{ gap: 16, marginTop: 20 }}>
             <TextField
               label="Email"
               icon="mail-outline"
@@ -89,13 +85,13 @@ export default function Login() {
               </Text>
             </Pressable>
 
-            {error && <Text style={{ color: colors.danger, fontSize: font.size.sm }}>{error}</Text>}
+            {error && <Text accessibilityRole="alert" style={{ color: colors.danger, fontSize: font.size.sm }}>{error}</Text>}
 
             <Button label="Log in" onPress={submit} loading={loading} />
 
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginVertical: 6 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginVertical: 4 }}>
               <View style={{ flex: 1, height: 1, backgroundColor: colors.border }} />
-              <Text style={{ color: colors.textFaint, fontSize: font.size.sm }}>or</Text>
+              <Text style={{ color: colors.textMuted, fontSize: font.size.sm }}>or</Text>
               <View style={{ flex: 1, height: 1, backgroundColor: colors.border }} />
             </View>
 
@@ -104,11 +100,11 @@ export default function Login() {
 
           <View style={{ flex: 1 }} />
 
-          <View style={{ flexDirection: 'row', justifyContent: 'center', marginTop: 24 }}>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center', marginTop: 24, columnGap: 4 }}>
             <Text style={{ color: colors.textMuted, fontSize: font.size.md }}>New to toxoff? </Text>
-            <Pressable onPress={() => router.replace('/(auth)/signup')}>
+            <Pressable accessibilityRole="button" onPress={() => router.replace('/(auth)/signup')} style={{ minHeight: 44, justifyContent: 'center' }}>
               <Text style={{ color: colors.primary, fontSize: font.size.md, fontWeight: font.weight.semibold }}>
-                Start free trial
+                Create a free account
               </Text>
             </Pressable>
           </View>

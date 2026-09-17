@@ -1,0 +1,6 @@
+Built-in image_gen background-extraction edit.
+Reference: /Users/Mubi/Downloads/tiktoknew.jpeg
+Selected output: exec-93286db5-eeea-47d7-b0cd-d4809d17bc63.png
+Actual output: 1254 x 1254 RGBA PNG with transparent background.
+
+Use case: background-extraction. Asset type: a transparent PNG platform logo for a small iOS UI icon. Input image 1 is the edit target. Remove ONLY the baked-in white/light-gray checkerboard background from this supplied TikTok musical-note logo, including inside the enclosed hole, and replace all of that background with ACTUAL alpha transparency. Preserve the entire original full-color musical-note silhouette, precise proportions, upright orientation, black central note, cyan upper-left offsets, vivid red lower-right offsets, and all clean logo contours. Do not redesign, simplify, recolor, rotate, add text, add any shape, or add shadows or lighting. Eliminate JPEG artifacts and checkerboard remnants at the edge; render crisp clean antialiased edges with no white or gray halo. Center the complete original mark on a square 1024 by 1024 PNG canvas with only about 3% transparent optical padding above and below, keeping the original aspect ratio. The result must be a genuinely transparent PNG with an alpha channel, no opaque background of any color and no drawn checkerboard. Black parts of the logo must remain solid black, not transparent.

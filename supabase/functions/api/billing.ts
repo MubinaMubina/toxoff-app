@@ -19,8 +19,6 @@ type Plan = (typeof PLANS)[number];
 type Interval = (typeof INTERVALS)[number];
 
 const RETURN_SCHEMES = ['toxoff:', 'exp:']; // the app, and Expo Go while developing
-// A trial with less left than this isn't worth a later first charge: charge now.
-const MIN_TRIAL_MS = 10 * 60_000;
 
 // Each price carries a lookup key, set in the Stripe dashboard: toxoff_solo_monthly,
 // toxoff_solo_annual, toxoff_plus_monthly and toxoff_plus_annual. The app never names prices.
@@ -138,14 +136,6 @@ async function findPrice(plan: Plan, interval: Interval): Promise<stripe.Price> 
   return price;
 }
 
-/** The end of the user's trial as a Unix time, if they're on it with enough of it left. */
-async function trialEnd(uid: string): Promise<number | undefined> {
-  const { data, error } = await db().from('profiles').select('sub_status, trial_ends_at').eq('id', uid).single();
-  if (error) throw error;
-  const end = data.trial_ends_at ? Date.parse(data.trial_ends_at) : 0;
-  return data.sub_status === 'trialing' && end - Date.now() > MIN_TRIAL_MS ? Math.floor(end / 1000) : undefined;
-}
-
 export async function subscribe(req: Request): Promise<Response> {
   const uid = await requireUser(req);
   const body = await readJson(req);
@@ -173,7 +163,6 @@ export async function subscribe(req: Request): Promise<Response> {
     customer: customer.customer_id,
     price: price.id,
     userId: uid,
-    trialEnd: await trialEnd(uid),
   });
   const { error } = await db().from('stripe_customers').update({ subscription_id: sub.id }).eq('user_id', uid);
   if (error) throw error;

@@ -53,7 +53,72 @@
       ],
       "expo-font",
       "expo-asset",
-      "expo-apple-authentication"
+      "expo-apple-authentication",
+      [
+        "expo-tracking-transparency",
+        {
+          "userTrackingPermission": "toxoff shows ads on the Free plan. Allowing tracking lets those ads be more relevant; the app works the same either way."
+        }
+      ],
+      [
+        "react-native-google-mobile-ads",
+        {
+          "iosAppId": "ca-app-pub-4027559384647325~4156046976",
+          "userTrackingUsageDescription": "toxoff shows ads on the Free plan. Allowing tracking lets those ads be more relevant; the app works the same either way.",
+          "skAdNetworkItems": [
+            "cstr6suwn9.skadnetwork",
+            "4fzdc2evr5.skadnetwork",
+            "2fnua5tbw4.skadnetwork",
+            "ydx93a7ass.skadnetwork",
+            "p78axxw29g.skadnetwork",
+            "v72qych5uu.skadnetwork",
+            "ludvb6z3bs.skadnetwork",
+            "cp8zw746q7.skadnetwork",
+            "3sh42y64q3.skadnetwork",
+            "c6k4g5qg8m.skadnetwork",
+            "s39g8k73mm.skadnetwork",
+            "3qy4746246.skadnetwork",
+            "hs6bdukanm.skadnetwork",
+            "mlmmfzh3r3.skadnetwork",
+            "v4nxqhlyqp.skadnetwork",
+            "wzmmz9fp6w.skadnetwork",
+            "su67r6k2v3.skadnetwork",
+            "yclnxrl5pm.skadnetwork",
+            "7ug5zh24hu.skadnetwork",
+            "gta9lk7p23.skadnetwork",
+            "vutu7akeur.skadnetwork",
+            "y5ghdn5j9k.skadnetwork",
+            "v9wttpbfk9.skadnetwork",
+            "n38lu8286q.skadnetwork",
+            "47vhws6wlr.skadnetwork",
+            "kbd757ywx3.skadnetwork",
+            "9t245vhmpl.skadnetwork",
+            "a2p9lx4jpn.skadnetwork",
+            "22mmun2rn5.skadnetwork",
+            "4468km3ulz.skadnetwork",
+            "2u9pt9hc89.skadnetwork",
+            "8s468mfl3y.skadnetwork",
+            "klf5c3l5u5.skadnetwork",
+            "ppxm28t8ap.skadnetwork",
+            "ecpz2srf59.skadnetwork",
+            "uw77j35x4d.skadnetwork",
+            "pwa73g5rt2.skadnetwork",
+            "mtkv5xtk9e.skadnetwork",
+            "5lm9lj6jb7.skadnetwork",
+            "6g9af3uyq4.skadnetwork",
+            "u679fj5vs4.skadnetwork",
+            "rx5hdcabgc.skadnetwork",
+            "g28c52eehv.skadnetwork",
+            "cg4yq2srnc.skadnetwork",
+            "9nlqeag3gk.skadnetwork",
+            "275upjj5gd.skadnetwork",
+            "wg4vff78zm.skadnetwork",
+            "qqp299437r.skadnetwork",
+            "294l99pt4k.skadnetwork",
+            "24t9a8vw3c.skadnetwork"
+          ]
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

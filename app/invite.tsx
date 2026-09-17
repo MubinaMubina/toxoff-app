@@ -1,6 +1,7 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, ScrollView, Share, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, ScrollView, Share, View } from 'react-native';
+import { Text } from '../src/components/AppText';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { TextField } from '../src/components/TextField';
 import { Button, Card, H1, HeaderButton, Muted, SectionLabel } from '../src/components/ui';
@@ -17,7 +18,7 @@ import { useTheme } from '../src/theme/ThemeContext';
 // Invite friends: share your single-use code, or enter a friend's (new accounts only).
 // toxoff://invite?code=ABCD2345 opens it with the friend's code filled in.
 export default function Invite() {
-  const { colors, font, spacing } = useTheme();
+  const { colors, font, spacing, radius } = useTheme();
   const router = useRouter();
   const params = useLocalSearchParams<{ code?: string }>();
   const [status, setStatus] = useState<InviteStatus | null>(null);
@@ -67,15 +68,15 @@ export default function Invite() {
       >
         <HeaderButton icon="close" label="Close" onPress={() => router.back()} />
 
-        <H1 style={{ marginTop: 8 }}>Invite friends</H1>
-        <Muted style={{ marginTop: 6, lineHeight: 21 }}>
+        <H1 style={{ marginTop: 8, fontWeight: font.weight.semibold, letterSpacing: -0.8 }}>Invite friends</H1>
+        <Muted style={{ marginTop: 8, lineHeight: 22 }}>
           When a friend joins with your code and connects their Instagram, you both get {INVITE_BONUS} more free
           comment checks. Works for up to {status?.max ?? 3} friends.
         </Muted>
 
         <View style={{ marginTop: spacing.xl }}>
           <SectionLabel>Your code</SectionLabel>
-          <Card>
+          <Card style={{ borderWidth: 1 }}>
             {!status && !loadError && <ActivityIndicator color={colors.primary} style={{ paddingVertical: 24 }} />}
             {loadError && (
               <View style={{ gap: 12 }}>
@@ -86,20 +87,21 @@ export default function Invite() {
             {status && (
               <View style={{ gap: 14 }}>
                 {status.code ? (
-                  <Text
-                    selectable
-                    accessibilityLabel={`Your invite code: ${status.code.split('').join(' ')}`}
-                    style={{
-                      color: colors.text,
-                      fontSize: font.size.xxl,
-                      fontWeight: font.weight.heavy,
-                      letterSpacing: 3,
-                      textAlign: 'center',
-                      paddingVertical: 6,
-                    }}
-                  >
-                    {formatInviteCode(status.code)}
-                  </Text>
+                  <View style={{ paddingVertical: 18, paddingHorizontal: 12, backgroundColor: colors.accentSoft, borderWidth: 1, borderColor: colors.accentBorder, borderRadius: radius.sm }}>
+                    <Text
+                      selectable
+                      accessibilityLabel={`Your invite code: ${status.code.split('').join(' ')}`}
+                      style={{
+                        color: colors.accentText,
+                        fontSize: font.size.xxl,
+                        fontWeight: font.weight.bold,
+                        letterSpacing: 3,
+                        textAlign: 'center',
+                      }}
+                    >
+                      {formatInviteCode(status.code)}
+                    </Text>
+                  </View>
                 ) : (
                   <Muted style={{ lineHeight: 21 }}>
                     {status.rewarded >= status.max
@@ -108,7 +110,7 @@ export default function Invite() {
                   </Muted>
                 )}
 
-                <Text style={{ color: colors.textMuted, fontSize: font.size.sm }}>
+                <Text style={{ color: colors.textMuted, fontSize: font.size.sm, lineHeight: 20 }}>
                   {status.rewarded} of {status.max} friends joined
                   {earned > 0 ? ` · ${earned} extra checks earned` : ''}
                   {status.pending > 0 ? ` · ${status.pending} waiting to connect Instagram` : ''}
@@ -123,7 +125,7 @@ export default function Invite() {
         {status?.canRedeem && (
           <View style={{ marginTop: spacing.xl }}>
             <SectionLabel>Have a friend’s code?</SectionLabel>
-            <Card style={{ gap: 12 }}>
+            <Card style={{ gap: 12, borderWidth: 1, backgroundColor: colors.hero }}>
               <TextField
                 value={friendCode}
                 onChangeText={setFriendCode}

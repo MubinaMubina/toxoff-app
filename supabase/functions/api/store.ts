@@ -52,17 +52,23 @@ const time = (iso: string | null | undefined) => (iso ? Date.parse(iso) : 0);
 /**
  * What the user's App Store subscriptions mean for the app. Counts while it's paid up or in
  * Apple's billing grace period (past_due: Apple is retrying the card). Refunded ones don't count.
- * If two overlap (a plan switch), the bigger plan wins, then the one that runs longest.
+ * Sandbox purchases require an explicit test-environment opt-in. Production purchases always win
+ * over sandbox ones; within an environment, the bigger plan wins, then the one that runs longest.
  */
-export function storeBillingState(subscriptions: Record<string, StoreSubscription>, now = Date.now()): StoreBilling {
+export function storeBillingState(
+  subscriptions: Record<string, StoreSubscription>,
+  now = Date.now(),
+  allowSandbox = false
+): StoreBilling {
   const live = Object.entries(subscriptions)
     .map(([productId, sub]) => ({ sub, planned: planOfProduct(productId) }))
     .filter(({ sub, planned }) => {
       const until = Math.max(time(sub.expires_date), time(sub.grace_period_expires_date));
-      return planned && !sub.refunded_at && until > now;
+      return planned && (allowSandbox || sub.is_sandbox !== true) && !sub.refunded_at && until > now;
     })
     .sort(
       (a, b) =>
+        Number(a.sub.is_sandbox === true) - Number(b.sub.is_sandbox === true) ||
         PLAN_RANK[b.planned!.plan] - PLAN_RANK[a.planned!.plan] ||
         time(b.sub.expires_date) - time(a.sub.expires_date)
     );
@@ -88,7 +94,7 @@ async function subscriber(uid: string): Promise<Record<string, StoreSubscription
 
 /** Re-reads the user from RevenueCat and copies their subscription onto the profile. */
 export async function syncStoreBilling(uid: string): Promise<StoreBilling> {
-  const state = storeBillingState(await subscriber(uid));
+  const state = storeBillingState(await subscriber(uid), Date.now(), env.revenuecatAllowSandbox());
   const { error } = await db().rpc('apply_store_billing', {
     uid,
     p_status: state.status,

@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
 import React from 'react';
 import { StyleSheet } from 'react-native';
+import { useBodyFontFamily } from '../../src/components/AppText';
 import { useTheme } from '../../src/theme/ThemeContext';
 
 type IconName = keyof typeof Ionicons.glyphMap;
@@ -15,6 +16,7 @@ function tabIcon(filled: IconName, outline: IconName) {
 
 export default function TabsLayout() {
   const { colors } = useTheme();
+  const fontFamily = useBodyFontFamily();
 
   return (
     <Tabs
@@ -28,7 +30,7 @@ export default function TabsLayout() {
           borderTopColor: colors.border,
           borderTopWidth: StyleSheet.hairlineWidth,
         },
-        tabBarLabelStyle: { fontSize: 11, fontWeight: '600' },
+        tabBarLabelStyle: { fontFamily: fontFamily ? 'Manrope-SemiBold' : undefined, fontSize: 11, fontWeight: fontFamily ? 'normal' : '600' },
       }}
     >
       <Tabs.Screen name="index" options={{ title: 'Home', tabBarIcon: tabIcon('home', 'home-outline') }} />

@@ -34,6 +34,8 @@ export const env = {
   // value set on its webhook.
   revenuecatSecretKey: () => setting('REVENUECAT_SECRET_KEY'),
   revenuecatWebhookAuth: () => setting('REVENUECAT_WEBHOOK_AUTH'),
+  // Enable only in isolated test deployments; sandbox purchases do not represent payment.
+  revenuecatAllowSandbox: () => Deno.env.get('REVENUECAT_ALLOW_SANDBOX') === 'true',
   stripeSecretKey: () => setting('STRIPE_SECRET_KEY'),
   stripeWebhookSecret: () => setting('STRIPE_WEBHOOK_SECRET'),
 };

@@ -1,12 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
-import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
+import { Alert, Pressable, ScrollView, View } from 'react-native';
+import { Text } from '../../src/components/AppText';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { PlatformIcon } from '../../src/components/PlatformIcon';
 import { OfflineBanner, SkeletonRows } from '../../src/components/Skeleton';
 import {
-  Badge,
   Button,
   Card,
   Chevron,
@@ -19,7 +19,7 @@ import {
 } from '../../src/components/ui';
 import { useAuth } from '../../src/context/AuthContext';
 import { useModeration } from '../../src/context/ModerationContext';
-import { getPlan, INVITE_BONUS } from '../../src/data/plans';
+import { FREE_CHECKS_PER_MONTH, getPlan, INVITE_BONUS } from '../../src/data/plans';
 import { apiPost, isApiConfigured } from '../../src/lib/api';
 import { emailSupport, openLink, PRIVACY_URL, TERMS_URL } from '../../src/lib/links';
 import { registerForPushNotifications } from '../../src/lib/notifications';
@@ -44,17 +44,15 @@ export default function Settings() {
   const planDetail =
     billing?.status === 'past_due'
       ? 'Payment problem. Update your payment method in the App Store.'
-      : subscription.status === 'trialing' && subscription.trialEndsAt
-        ? `Trial ends ${shortDate(subscription.trialEndsAt)}, then ${billing?.status === 'scheduled' ? billingPlan : 'Free'}`
-        : billing?.periodEnd
-          ? billing.status === 'scheduled'
-            ? `Starts ${shortDate(billing.periodEnd)}`
-            : billing.cancelAtPeriodEnd
-              ? `Ends ${shortDate(billing.periodEnd)}`
-              : `Renews ${shortDate(billing.periodEnd)} · billed ${billing.interval === 'annual' ? 'yearly' : 'monthly'}`
-          : subscription.status === 'free'
-            ? 'Upgrade for unlimited moderation'
-            : 'Manage your plan & billing';
+      : billing?.periodEnd
+        ? billing.status === 'scheduled'
+          ? `Starts ${shortDate(billing.periodEnd)}`
+          : billing.cancelAtPeriodEnd
+            ? `Ends ${shortDate(billing.periodEnd)}`
+            : `Renews ${shortDate(billing.periodEnd)} · billed ${billing.interval === 'annual' ? 'yearly' : 'monthly'}`
+        : subscription.status === 'free'
+          ? `${FREE_CHECKS_PER_MONTH} checks a month, with ads. Upgrade for unlimited, ad-free moderation.`
+          : 'Manage your plan & billing';
 
   // Changing plan, the payment method, or cancelling all happen on Apple's own subscriptions page.
   const manageBilling = async () => {
@@ -162,12 +160,12 @@ export default function Settings() {
               width: 54,
               height: 54,
               borderRadius: 27,
-              backgroundColor: colors.primary,
+              backgroundColor: colors.accentSoft,
               alignItems: 'center',
               justifyContent: 'center',
             }}
           >
-            <Text style={{ color: '#fff', fontSize: font.size.xl, fontWeight: font.weight.bold }}>
+            <Text style={{ color: colors.accentText, fontSize: font.size.xl, fontWeight: font.weight.bold }}>
               {(user?.name?.[0] ?? 'C').toUpperCase()}
             </Text>
           </View>
@@ -188,14 +186,9 @@ export default function Settings() {
             <Card>
               <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
                 <View style={{ flex: 1 }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                    <Text style={{ color: colors.text, fontSize: font.size.lg, fontWeight: font.weight.semibold }}>
-                      {plan.name} plan
-                    </Text>
-                    {subscription.status === 'trialing' && (
-                      <Badge label="Trial" color={colors.success} bg={colors.successSoft} />
-                    )}
-                  </View>
+                  <Text style={{ color: colors.text, fontSize: font.size.lg, fontWeight: font.weight.semibold }}>
+                    {plan.name} plan
+                  </Text>
                   <Text
                     style={{
                       color: billing?.status === 'past_due' ? colors.warning : colors.textMuted,
@@ -249,24 +242,32 @@ export default function Settings() {
             <SkeletonRows count={1} lines={1} />
           ) : (
           <Card padded={false}>
-            {accounts.map((acc) => (
-              <React.Fragment key={acc.id}>
-                <View style={ROW}>
-                  <RowIcon>
-                    <PlatformIcon platform={acc.platform} size={17} withBackground />
-                  </RowIcon>
-                  <Text style={{ color: colors.text, fontSize: font.size.md, flex: 1, fontWeight: font.weight.medium }}>
-                    {acc.handle}
-                  </Text>
-                  <Ionicons
-                    name={acc.connected ? 'checkmark-circle' : 'alert-circle'}
-                    size={20}
-                    color={acc.connected ? colors.success : colors.warning}
-                  />
-                </View>
-                <RowSeparator />
-              </React.Fragment>
-            ))}
+            {accounts.map((acc) => {
+              const connectionVerified = status === 'ready' && acc.platform === 'instagram';
+              const connectionLabel = !connectionVerified
+                ? (acc.platform === 'instagram' ? 'Connection status unavailable' : 'Platform unavailable')
+                : acc.connected ? 'Instagram connected' : 'Instagram needs reconnection';
+              return (
+                <React.Fragment key={acc.id}>
+                  <View style={ROW}>
+                    <RowIcon>
+                      <PlatformIcon platform={acc.platform} size={17} withBackground />
+                    </RowIcon>
+                    <Text style={{ color: colors.text, fontSize: font.size.md, flex: 1, fontWeight: font.weight.medium }}>
+                      {acc.handle}
+                    </Text>
+                    <Ionicons
+                      accessibilityLabel={connectionLabel}
+                      accessibilityRole="image"
+                      name={!connectionVerified ? 'time-outline' : acc.connected ? 'checkmark-circle' : 'alert-circle'}
+                      size={20}
+                      color={!connectionVerified ? colors.neutral : acc.connected ? colors.success : colors.warning}
+                    />
+                  </View>
+                  <RowSeparator />
+                </React.Fragment>
+              );
+            })}
             <Pressable onPress={() => router.push('/connect-accounts')} style={ROW}>
               <RowIcon>
                 <Ionicons name="add-circle-outline" size={22} color={colors.primary} />
@@ -310,6 +311,7 @@ export default function Settings() {
               icon="flame-outline"
               title="Auto-erase deleted comments"
               hint="Their words are wiped from your log for good, unread. Your totals on Home still count them."
+              hintTone={preferences.autoEraseDays === null ? 'info' : 'warning'}
             >
               <Segmented<'never' | '7' | '30'>
                 value={preferences.autoEraseDays === null ? 'never' : (String(preferences.autoEraseDays) as '7' | '30')}
@@ -383,7 +385,7 @@ export default function Settings() {
         <Button
           label="Log out"
           icon="log-out-outline"
-          variant="danger"
+          variant="secondary"
           onPress={confirmLogout}
           style={{ marginTop: spacing.xl }}
         />
@@ -396,7 +398,7 @@ export default function Settings() {
           hitSlop={8}
           style={{ alignSelf: 'center', marginTop: 16, minHeight: 24, justifyContent: 'center', opacity: deleting ? 0.5 : 1 }}
         >
-          <Text style={{ color: colors.textMuted, fontSize: font.size.sm, fontWeight: font.weight.medium }}>
+          <Text style={{ color: colors.danger, fontSize: font.size.sm, fontWeight: font.weight.medium }}>
             {deleting ? 'Deleting your account…' : 'Delete my account'}
           </Text>
         </Pressable>
@@ -422,11 +424,13 @@ function ChoiceBlock({
   icon,
   title,
   hint,
+  hintTone = 'info',
   children,
 }: {
   icon: keyof typeof Ionicons.glyphMap;
   title: string;
   hint?: string;
+  hintTone?: 'info' | 'warning';
   children: React.ReactNode;
 }) {
   const { colors, font } = useTheme();
@@ -442,7 +446,7 @@ function ChoiceBlock({
       </View>
       {children}
       {hint && (
-        <Text style={{ color: colors.textMuted, fontSize: font.size.xs, lineHeight: 17 }}>{hint}</Text>
+        <Text style={{ color: hintTone === 'warning' ? colors.warning : colors.info, fontSize: font.size.xs, lineHeight: 17 }}>{hint}</Text>
       )}
     </View>
   );

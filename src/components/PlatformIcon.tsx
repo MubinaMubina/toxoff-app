@@ -1,31 +1,31 @@
-import { FontAwesome5, FontAwesome6 } from '@expo/vector-icons';
 import React from 'react';
-import { View } from 'react-native';
-import { Platform } from '../types';
+import { Image, View } from 'react-native';
+import type { ImageSourcePropType } from 'react-native';
+import { palette } from '../theme/colors';
+import type { Platform } from '../types';
 
-const COLORS: Record<Platform, string> = {
-  instagram: '#E1306C',
-  tiktok: '#000000',
+const SOURCES: Record<Platform, ImageSourcePropType> = {
+  instagram: require('../../assets/platforms/instagram.png'),
+  tiktok: require('../../assets/platforms/tiktok.png'),
 };
 
 export function PlatformIcon({
   platform,
   size = 18,
   withBackground = false,
-  tint,
 }: {
   platform: Platform;
   size?: number;
   withBackground?: boolean;
-  tint?: string;
 }) {
-  const color = tint ?? (withBackground ? '#FFFFFF' : COLORS[platform]);
-  const icon =
-    platform === 'instagram' ? (
-      <FontAwesome5 name="instagram" size={size} color={color} />
-    ) : (
-      <FontAwesome6 name="tiktok" size={size} color={color} />
-    );
+  const icon = (
+    <Image
+      source={SOURCES[platform]}
+      resizeMode="contain"
+      style={{ width: size, height: size }}
+      accessible={false}
+    />
+  );
 
   if (!withBackground) return icon;
 
@@ -36,7 +36,7 @@ export function PlatformIcon({
         width: box,
         height: box,
         borderRadius: box / 3.2,
-        backgroundColor: COLORS[platform],
+        backgroundColor: palette.white,
         alignItems: 'center',
         justifyContent: 'center',
       }}
