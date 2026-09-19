@@ -117,11 +117,14 @@ blocklist and blocked users (keywords match whole words). The spam category is *
 `classify()`; the rest only sees scores.
 
 The classifier does one thing: it scores a comment's text, and the only action taken on the result
-is removing that one comment. `filters.flagged_action` (Filters screen) decides how: **hide** is the
-new setup default and hides every flagged comment so it can be restored; **auto** (shown as
-"Delete clear abuse") permanently deletes toxicity scored at 80% or more and hides everything else,
-including spam; **delete** permanently deletes every flagged comment, including spam
-(`chooseAction()` in `moderation.ts`). Selecting either deletion mode requires confirmation in
+is removing that one comment. `filters.flagged_action` (Filters screen) decides how: **delete**, the
+default for new accounts since 19 September 2026, permanently deletes every flagged comment,
+including spam; **auto** (shown as "Delete clear abuse") permanently deletes toxicity scored at 80%
+or more and hides everything else, including spam; **hide** hides every flagged comment so it can
+be restored (`chooseAction()` in `moderation.ts`). New accounts also start on **High**
+sensitivity. Both defaults live in `src/data/moderationDefaults.ts`, the column defaults on
+`public.filters` (migration `20260919100000_strict_defaults.sql`) and the fallbacks in
+`loadFilters()` (`pipeline.ts`); keep the three in step. Selecting either deletion mode requires confirmation in
 Filters. Existing saved modes are preserved. Blocked users and keywords are rules, not AI scores,
 so auto hides those. The log records which happened (`moderation_log.action`),
 and Restore is refused for deleted ones. The app's Log has two sections: **Hidden** (readable,
@@ -486,9 +489,10 @@ to subscriptions in RevenueCat. RevenueCat doesn't serve ads itself.
 
 After sign-up, `app/onboarding.tsx` has three steps:
 
-1. **Connect:** connect Instagram, or choose "Connect later." First setup saves reversible hiding
-   before opening Instagram because moderation can begin as soon as an account is connected.
-2. **Protection:** choose Gentle, Balanced (recommended), or Strict sensitivity, with an optional
+1. **Connect:** connect Instagram, or choose "Connect later." First setup saves the chosen
+   protection (by default Strict, with every flagged comment deleted) before opening Instagram,
+   because moderation can begin as soon as an account is connected.
+2. **Protection:** choose Gentle, Balanced, or Strict (the default) sensitivity, with an optional
    spam toggle. The screen describes behavior without showing abusive example comments.
 3. **Ready:** review the account and settings, then finish on Home. Skipped connection is clearly
    shown as not connected; it does not imply protection is running.
