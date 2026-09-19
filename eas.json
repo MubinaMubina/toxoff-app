@@ -10,19 +10,32 @@
     },
     "preview": {
       "distribution": "internal",
-      "ios": { "simulator": true }
+      "ios": {
+        "simulator": true
+      }
     },
     "production": {
       "autoIncrement": true,
-      "ios": { "resourceClass": "m-medium" }
+      "ios": {
+        "resourceClass": "m-medium"
+      }
+    },
+    "development-simulator": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "ios": {
+        "simulator": true
+      }
     }
   },
   "submit": {
     "production": {
       "ios": {
-        "appleId": "YOUR_APPLE_ID_EMAIL",
-        "ascAppId": "YOUR_APP_STORE_CONNECT_APP_ID",
-        "appleTeamId": "YOUR_APPLE_TEAM_ID"
+        "ascAppId": "6813284133",
+        "appleTeamId": "74L3KZ3QJA",
+        "ascApiKeyPath": "/Users/Mubi/toxoff-secrets/AuthKey_NF6T7YKRPX.p8",
+        "ascApiKeyId": "NF6T7YKRPX",
+        "ascApiKeyIssuerId": "eea90b83-a6ed-4296-bb34-74c580e127a8"
       },
       "android": {
         "serviceAccountKeyPath": "./play-service-account.json",

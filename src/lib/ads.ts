@@ -64,6 +64,9 @@ export function initAds(): Promise<void> {
     } catch {
       personalized = false;
     }
+    // Development builds only ever ask for test ads: simulators count as test devices, which
+    // keeps real ad units safe to use while developing (and lets Google's reward callback fire).
+    if (__DEV__) await g.default().setRequestConfiguration({ testDeviceIdentifiers: ['EMULATOR'] });
     await g.default().initialize();
   })();
   return initialized;
@@ -159,6 +162,7 @@ export async function showRewardedAd(userId: string): Promise<RewardOutcome> {
       done(true);
     });
     ad.addAdEventListener(g.AdEventType.ERROR, (error: { code?: number; message?: string }) => {
+      if (__DEV__) console.warn('Rewarded ad failed to load', error?.code, error?.message);
       trackAdFailedToLoad('checks_reward', REWARDED_UNIT, typeof error?.code === 'number' ? error.code : null);
       done(false);
     });
@@ -170,6 +174,7 @@ export async function showRewardedAd(userId: string): Promise<RewardOutcome> {
     let earned = false;
     ad.addAdEventListener(g.RewardedAdEventType.EARNED_REWARD, () => {
       earned = true;
+      if (__DEV__) console.log('Rewarded ad: reward earned, waiting for Google to tell the backend');
     });
     ad.addAdEventListener(g.AdEventType.OPENED, () => trackAdDisplayed('checks_reward', REWARDED_UNIT, impressionId));
     ad.addAdEventListener(g.AdEventType.CLICKED, () => trackAdOpened('checks_reward', REWARDED_UNIT, impressionId));

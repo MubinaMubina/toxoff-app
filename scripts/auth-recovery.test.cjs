@@ -95,7 +95,7 @@ function setup({ initialUrl = null, marker = null, holdMarker = false, exchangeE
     if (id in mocks) return mocks[id];
     if (id.endsWith('/passwordRecovery')) return helper.exports;
     if (id.endsWith('/supabase')) return { isSupabaseConfigured: true, supabase };
-    if (id.endsWith('/plans')) return { TRIAL_DAYS: 7 };
+    if (id.endsWith('/oauthCallback')) return { oauthCodeFromUrl: () => null };
     if (id.endsWith('/purchases')) return { identifyPurchaser: async (id) => { calls.purchaserIds.push(id); } };
     throw new Error(`Unmocked import: ${id}`);
   };

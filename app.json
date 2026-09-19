@@ -2,6 +2,7 @@
   "expo": {
     "name": "toxoff",
     "slug": "toxoff",
+    "owner": "toxoff",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -33,7 +34,8 @@
         "backgroundColor": "#13433B"
       },
       "permissions": [
-        "NOTIFICATIONS"
+        "NOTIFICATIONS",
+        "com.google.android.gms.permission.AD_ID"
       ]
     },
     "web": {
@@ -128,7 +130,7 @@
         "origin": false
       },
       "eas": {
-        "projectId": "00000000-0000-0000-0000-000000000000"
+        "projectId": "8c3045a1-6b22-4405-b0c8-28607dd16ae2"
       }
     }
   }

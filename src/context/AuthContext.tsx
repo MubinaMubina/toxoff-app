@@ -14,6 +14,7 @@ import React, {
   useRef,
   useState,
 } from 'react';
+import { oauthCodeFromUrl } from '../lib/oauthCallback';
 import { identifyPurchaser } from '../lib/purchases';
 import {
   isVerifiedRecoverySession,
@@ -395,7 +396,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (error) throw error;
     const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
     if (result.type !== 'success') return null;
-    const code = new URL(result.url).searchParams.get('code');
+    // Not `new URL(...).searchParams`: on the app's own scheme iOS hands the link back with
+    // Supabase's trailing "#" encoded into the code (src/lib/oauthCallback.ts).
+    const code = oauthCodeFromUrl(result.url);
     if (!code) throw new Error('Google sign-in did not complete. Please try again.');
     const { data: session, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
     if (exchangeError) throw exchangeError;
