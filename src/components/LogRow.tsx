@@ -101,6 +101,19 @@ export function LogRow({
       </View>
       </Pressable>
 
+      {/* Always on the row, so reading a concealed comment is one deliberate tap away. */}
+      {concealed && (
+        <Pressable
+          onPress={() => { Haptics.selectionAsync().catch(() => {}); setRevealed(true); }}
+          accessibilityRole="button"
+          accessibilityLabel="Read this comment anyway"
+          // Lines up with the text column above: the platform tile (14pt icon × 1.9) plus the row's 12pt gap.
+          style={{ alignSelf: 'flex-start', minHeight: 44, justifyContent: 'center', paddingRight: 12, marginTop: 2, marginLeft: Math.round(14 * 1.9) + 12 }}
+        >
+          <Text style={{ color: colors.textMuted, fontSize: font.size.sm, textDecorationLine: 'underline' }}>Read it anyway</Text>
+        </Pressable>
+      )}
+
       {open && (
         <View style={{ marginTop: 14, paddingTop: 14, borderTopWidth: 0.5, borderTopColor: colors.border, gap: 10 }}>
           <DetailRow label="Posted on" value={comment.postRef} colors={colors} font={font} />
@@ -190,16 +203,6 @@ export function LogRow({
             <Text style={{ color: colors.textFaint, fontSize: font.size.xs, textAlign: 'center' }}>
               Removed by mistake? Restoring re-publishes it on {platformName}.
             </Text>
-          )}
-          {concealed && (
-            <Pressable
-              onPress={() => setRevealed(true)}
-              accessibilityRole="button"
-              accessibilityLabel="Read this comment anyway"
-              style={{ alignSelf: 'center', maxWidth: '100%', minHeight: 44, justifyContent: 'center', paddingHorizontal: 12, paddingVertical: 8 }}
-            >
-              <Text style={{ color: colors.textFaint, fontSize: font.size.xs, textAlign: 'center' }}>Read it anyway</Text>
-            </Pressable>
           )}
         </View>
       )}

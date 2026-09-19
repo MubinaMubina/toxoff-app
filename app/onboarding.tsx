@@ -9,6 +9,7 @@ import { PlatformIcon } from '../src/components/PlatformIcon';
 import { Button, Card, H1, HeaderButton, Muted, RowSeparator } from '../src/components/ui';
 import { useAuth } from '../src/context/AuthContext';
 import { useModeration } from '../src/context/ModerationContext';
+import { DEFAULT_FLAGGED_ACTION, DEFAULT_SENSITIVITY } from '../src/data/moderationDefaults';
 import { AUTO_DELETE_PERCENT, getPlan } from '../src/data/plans';
 import { useTheme } from '../src/theme/ThemeContext';
 import { Sensitivity } from '../src/types';
@@ -17,7 +18,7 @@ const STEPS = ['Connect', 'Protection', 'Ready'] as const;
 const PROTECTION_LEVELS: { value: Sensitivity; label: string; description: string }[] = [
   { value: 'low', label: 'Gentle', description: 'Focus on clear abuse, including threats and direct attacks.' },
   { value: 'medium', label: 'Balanced', description: 'Catch insults and bullying while allowing criticism of your content.' },
-  { value: 'high', label: 'Strict', description: 'Catch more borderline comments. May also hide harsh criticism.' },
+  { value: 'high', label: 'Strict', description: 'Catch more borderline comments. May also remove harsh criticism.' },
 ];
 
 // Only connection and a protection level are needed to get started. Filters and Settings
@@ -37,7 +38,7 @@ export default function Onboarding() {
   const sensitivity = selectedSensitivity ?? filters.sensitivity;
   const spamEnabled = spamProtection ?? filters.categories.spam;
   // New users start on auto: clear abuse deleted for good, the rest hidden. Changed in Filters.
-  const action = onboarded ? filters.flaggedAction : 'auto';
+  const action = onboarded ? filters.flaggedAction : DEFAULT_FLAGGED_ACTION;
   const connectedAccount = accounts.find((a) => a.platform === 'instagram' && a.connected);
   const atLimit = accounts.length >= getPlan(subscription.plan).maxAccounts;
   const busy = connecting || saving;
@@ -164,12 +165,12 @@ export default function Onboarding() {
                     return (
                       <Pressable key={option.value} onPress={() => { Haptics.selectionAsync().catch(() => {}); setSelectedSensitivity(option.value); }} disabled={busy}
                         accessibilityRole="radio" accessibilityState={{ checked: selected, disabled: busy }}
-                        accessibilityLabel={`${option.label}${option.value === 'medium' ? ', recommended' : ''}. ${option.description}`}
+                        accessibilityLabel={`${option.label}${option.value === DEFAULT_SENSITIVITY ? ', the default' : ''}. ${option.description}`}
                         style={({ pressed }) => ({ padding: 16, borderRadius: radius.lg, borderWidth: 1, borderColor: selected ? colors.primary : colors.border, backgroundColor: selected ? colors.hero : colors.card, flexDirection: 'row', gap: 12, opacity: pressed ? 0.8 : 1 })}>
                         <Ionicons name={selected ? 'checkmark-circle' : 'ellipse-outline'} size={24} color={selected ? colors.primary : colors.textMuted} />
                         <View style={{ flex: 1 }}>
                           <Text style={{ color: colors.text, fontSize: font.size.lg, fontWeight: font.weight.semibold }}>{option.label}</Text>
-                          {option.value === 'medium' && <Text style={{ color: colors.info, fontSize: font.size.sm, fontWeight: font.weight.semibold, marginTop: 2 }}>Recommended</Text>}
+                          {option.value === DEFAULT_SENSITIVITY && <Text style={{ color: colors.info, fontSize: font.size.sm, fontWeight: font.weight.semibold, marginTop: 2 }}>Default</Text>}
                           <Text style={{ color: colors.textMuted, fontSize: font.size.md, lineHeight: 21, marginTop: 6 }}>{option.description}</Text>
                         </View>
                       </Pressable>

@@ -16,6 +16,7 @@ import {
   MOCK_FREE_COMMENTS_USED,
   MOCK_REMOVED,
 } from '../data/mockData';
+import { DEFAULT_FLAGGED_ACTION, DEFAULT_SENSITIVITY, flaggedActionOr, sensitivityOr } from '../data/moderationDefaults';
 import { AD_REWARDS_PER_DAY, FREE_CHECKS_PER_MONTH, freePeriod } from '../data/plans';
 import { initAds } from '../lib/ads';
 import { apiPost } from '../lib/api';
@@ -178,11 +179,11 @@ const toPreferences = (p: ProfilePrefsRow): Preferences => ({
 
 const ZERO_METRICS: Metrics = { today: 0, week: 0, month: 0 };
 const EMPTY_FILTERS: FilterSettings = {
-  sensitivity: 'medium',
+  sensitivity: DEFAULT_SENSITIVITY,
   categories: DEFAULT_FILTERS.categories,
   keywords: [],
   blockedUsers: [],
-  flaggedAction: 'auto',
+  flaggedAction: DEFAULT_FLAGGED_ACTION,
 };
 
 const toAccount = (r: AccountRow): ConnectedAccount => ({
@@ -209,11 +210,11 @@ const toComment = (r: LogRow): RemovedComment => ({
 });
 
 const toFilters = (r: FiltersRow): FilterSettings => ({
-  sensitivity: r.sensitivity ?? 'medium',
+  sensitivity: sensitivityOr(r.sensitivity),
   categories: { ...EMPTY_FILTERS.categories, ...r.categories },
   keywords: r.keywords ?? [],
   blockedUsers: r.blocked_users ?? [],
-  flaggedAction: r.flagged_action === 'delete' || r.flagged_action === 'hide' ? r.flagged_action : 'auto',
+  flaggedAction: flaggedActionOr(r.flagged_action),
 });
 
 // Counted server-side, over the whole log: beyond the rows loaded here, and beyond the days the
@@ -705,7 +706,7 @@ export function ModerationProvider({ children }: { children: React.ReactNode }) 
         sensitivity: a.sensitivity,
         categories: a.categories,
         keywords: a.keywords,
-        flaggedAction: a.flaggedAction ?? 'auto',
+        flaggedAction: a.flaggedAction ?? DEFAULT_FLAGGED_ACTION,
       };
       const notificationsOn = a.notificationMode !== 'none' &&
         (a.pushToken === undefined ? notificationsEnabled : a.pushToken !== null);

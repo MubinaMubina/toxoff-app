@@ -41,14 +41,14 @@ const ACTION_HINT: Record<FlaggedAction, string> = {
 
 const ACTION_OPTIONS: { value: FlaggedAction; label: string; note: string }[] = [
   { value: 'hide', label: 'Hide comments', note: 'Can be restored' },
-  { value: 'auto', label: 'Delete clear abuse', note: `Permanent above ${AUTO_DELETE_PERCENT}% confidence · Recommended` },
-  { value: 'delete', label: 'Delete all flagged comments', note: 'Permanent for every flagged comment' },
+  { value: 'auto', label: 'Delete clear abuse', note: `Permanent above ${AUTO_DELETE_PERCENT}% confidence` },
+  { value: 'delete', label: 'Delete all flagged comments', note: 'Permanent for every flagged comment · Default' },
 ];
 
 const SENSITIVITY_HINT: Record<Sensitivity, string> = {
   low: 'Only removes clearly toxic comments. Fewest false positives.',
-  medium: 'Balanced — recommended for most creators.',
-  high: 'Aggressively removes borderline comments. May catch more.',
+  medium: 'Balanced. Catches insults and bullying, allows criticism.',
+  high: 'The default. Aggressively removes borderline comments. May catch more.',
 };
 
 export default function Filters() {

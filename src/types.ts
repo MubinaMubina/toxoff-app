@@ -40,9 +40,9 @@ export type CategoryKey =
   | 'spam'
   | 'self_harm';
 
-// What happens to a flagged comment: 'auto' (the default: anything toxic the AI is at least 80%
-// sure of is deleted for good, spam excepted, the rest hidden), 'hide' everything (can be
-// restored), or 'delete' everything.
+// What happens to a flagged comment: 'delete' everything for good (the default, see
+// src/data/moderationDefaults.ts), 'auto' (anything toxic the AI is at least 80% sure of is
+// deleted, spam excepted, the rest hidden), or 'hide' everything (can be restored).
 export type FlaggedAction = 'hide' | 'auto' | 'delete';
 
 export type FilterSettings = {

@@ -1,4 +1,5 @@
 import { ConnectedAccount, FilterSettings, RemovedComment } from '../types';
+import { DEFAULT_FLAGGED_ACTION, DEFAULT_SENSITIVITY } from './moderationDefaults';
 
 // Relative to app launch so the demo feed always looks recent.
 const NOW = Date.now();
@@ -19,7 +20,7 @@ export const MOCK_ACCOUNTS: ConnectedAccount[] = [
 export const MOCK_FREE_COMMENTS_USED = 12;
 
 export const DEFAULT_FILTERS: FilterSettings = {
-  sensitivity: 'medium',
+  sensitivity: DEFAULT_SENSITIVITY,
   categories: {
     hate_speech: true,
     harassment: true,
@@ -29,7 +30,7 @@ export const DEFAULT_FILTERS: FilterSettings = {
   },
   keywords: ['scamlink.biz', 'free followers'],
   blockedUsers: ['troll_acct_99'],
-  flaggedAction: 'auto',
+  flaggedAction: DEFAULT_FLAGGED_ACTION,
 };
 
 export const MOCK_REMOVED: RemovedComment[] = [

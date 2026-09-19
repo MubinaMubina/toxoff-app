@@ -195,11 +195,13 @@ async function loadFilters(userId: string): Promise<FilterSettings & { action: F
     .maybeSingle();
   if (error) throw error;
   return {
-    sensitivity: data?.sensitivity ?? 'medium',
+    // Fallbacks match the column defaults on public.filters (High, delete all): see
+    // supabase/migrations/20260919100000_strict_defaults.sql and src/data/moderationDefaults.ts.
+    sensitivity: data?.sensitivity ?? 'high',
     categories: data?.categories ?? {},
     keywords: data?.keywords ?? [],
     blockedUsers: data?.blocked_users ?? [],
-    action: data?.flagged_action === 'delete' || data?.flagged_action === 'hide' ? data.flagged_action : 'auto',
+    action: data?.flagged_action === 'auto' || data?.flagged_action === 'hide' ? data.flagged_action : 'delete',
   };
 }
 

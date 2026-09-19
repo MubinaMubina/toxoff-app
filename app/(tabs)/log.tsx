@@ -53,10 +53,12 @@ export default function Log() {
   const { colors, font, radius, spacing } = useTheme();
   const router = useRouter();
   const { subscription } = useAuth();
-  const { status, reload, comments, concealed, restoreComment, eraseDeletedComments } = useModeration();
+  const { status, reload, comments, concealed, restoreComment, eraseDeletedComments, filters } = useModeration();
   const historyDays = getPlan(subscription.plan).logHistoryDays;
 
-  const [section, setSection] = useState<Section>('hidden');
+  // Until a tab is tapped, the Log opens on the one with the user's comments: with "Delete all"
+  // (the default) everything lands in Deleted and Hidden stays empty.
+  const [pickedSection, setSection] = useState<Section | null>(null);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [platform, setPlatform] = useState<Platform | 'all'>('all');
   const [reason, setReason] = useState<ModerationReason | 'all'>('all');
@@ -68,12 +70,15 @@ export default function Log() {
       Alert.alert('Could not restore comment', e?.message ?? 'Please try again.')
     );
 
+  const deletedCount = useMemo(() => comments.filter((c) => c.action === 'deleted').length, [comments]);
+  const hiddenCount = comments.length - deletedCount;
+  const section: Section =
+    pickedSection ??
+    (hiddenCount === 0 && (deletedCount > 0 || filters.flaggedAction === 'delete') ? 'deleted' : 'hidden');
   const inSection = useMemo(
     () => comments.filter((c) => (c.action === 'deleted') === (section === 'deleted')),
     [comments, section]
   );
-  const deletedCount = useMemo(() => comments.filter((c) => c.action === 'deleted').length, [comments]);
-  const hiddenCount = comments.length - deletedCount;
 
   const filtered = useMemo(() => {
     const now = Date.now();

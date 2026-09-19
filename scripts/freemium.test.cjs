@@ -82,6 +82,8 @@ test('the Free plan against an isolated PostgreSQL database', { timeout: 120000 
       public.effective_plan('${user(1)}') from public.profiles where id = '${user(1)}';`), 't|none|0|0|free');
     assert.equal(sql(`select count(*) from information_schema.columns
       where table_name = 'profiles' and column_name = 'trial_ends_at';`), '0');
+    // New accounts start strict: High sensitivity, every flagged comment deleted.
+    assert.equal(sql(`select sensitivity, flagged_action from public.filters where user_id = '${user(1)}';`), 'high|delete');
     assert.equal(sql(`select monthly_checks, log_history_days, ads from public.plan_limits where plan = 'free';`), '50|7|t');
     assert.equal(sql(`select monthly_checks is null, log_history_days is null, ads from public.plan_limits where plan = 'plus';`), 't|t|f');
   });
