@@ -19,7 +19,7 @@ Launches on **iOS (App Store)**; the codebase can also build for Android later.
 
 ```bash
 npm install
-npm run gen:assets        # rebuild icon/splash from assets/toxoff-icon-green-1024.png (needs Pillow; optional)
+npm run gen:assets        # export platform sizes from the approved icon and mascot (optional)
 cp .env.example .env      # fill in keys — or leave blank to run in DEMO MODE
 npx expo start            # press i (iOS), a (Android), or scan in Expo Go
 ```
@@ -55,7 +55,7 @@ supabase/config.toml       # Supabase CLI config (auth settings, redirect URLs)
 supabase/migrations/       # database schema: tables, RLS, triggers, plan limits, cron jobs
 supabase/functions/api/    # backend: Instagram connect, comment webhooks, AI check, restores
 supabase/functions/tests/  # backend unit tests (Deno)
-scripts/generate-assets.py # icon, splash, favicon and notification icon from the master icon
+scripts/generate-assets.cjs # platform exports from the original icon and transparent mascot
 ```
 
 ---
@@ -566,8 +566,11 @@ Before submitting, fill in `eas.json > submit.production`:
 
 Also replace the placeholder `extra.eas.projectId` in `app.json` (set automatically by
 `eas build:configure`). The store assets in `assets/` (icon, adaptive icon, splash, favicon,
-notification icon) are built from the master icon `assets/toxoff-icon-green-1024.png` by
-`npm run gen:assets`; to change the icon, replace that file and re-run it. The app's colours
+notification icon) are exported from `assets/toxoff-mascot-icon-1024.png` and the transparent
+`assets/mascot/toxoff-mascot.png` by `npm run gen:assets`. The icon preserves the original supplied
+artwork; the mascot holds a blank lavender speech bubble. After changing these files, regenerate
+the assets and rebuild native apps to update their installed launcher icons and launch screens.
+The app's colours
 (`src/theme/colors.ts`) now match the live toxoff.app: warm paper `#FAFBF7`, sage `#EDF5E9`, forest
 `#173F35` and lavender `#E4DDF5`. Bundled Manrope runs through `src/components/AppText.tsx`; see
 [`assets/fonts/README.md`](assets/fonts/README.md) for font sources and licensing. Native layouts
@@ -589,4 +592,4 @@ saved theme choices are retained, with the same palette adapted for dark mode.
 | `npm run typecheck` | `tsc --noEmit` (strict mode) |
 | `npm run test:functions` | Backend unit tests (needs Deno) |
 | `npm run lint` | Expo lint |
-| `npm run gen:assets` | Regenerate placeholder icon/splash PNGs |
+| `npm run gen:assets` | Export branded icon, splash, favicon, adaptive and notification PNGs |

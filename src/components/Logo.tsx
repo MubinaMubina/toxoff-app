@@ -5,6 +5,20 @@ import { useTheme } from '../theme/ThemeContext';
 
 // The app icon itself (assets/icon.png), rounded the way iOS rounds it.
 const ICON = require('../../assets/icon.png');
+const MASCOT = require('../../assets/mascot/toxoff-mascot.png');
+
+export function Mascot({ size = 224 }: { size?: number }) {
+  return (
+    <Image
+      source={MASCOT}
+      style={{ width: size, height: size }}
+      resizeMode="contain"
+      accessible={false}
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
+    />
+  );
+}
 
 export function LogoMark({ size = 56 }: { size?: number }) {
   const { colors } = useTheme();

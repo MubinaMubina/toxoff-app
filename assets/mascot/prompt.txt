@@ -1,0 +1,9 @@
+Tool: built-in image_gen (background extraction edit).
+Reference: /Users/Mubi/Downloads/newicon.jpeg
+Selected generated file: /Users/Mubi/.codex/generated_images/01a0a233-e3ff-7373-8b54-f00a05b1f36c/exec-14476538-4518-4945-a294-4741e4f5aeb7.png
+Saved asset: assets/mascot/toxoff-mascot.png
+Actual output: 1254 x 1254 RGBA PNG, 789014 bytes.
+User correction applied: speech bubble stays blank. No check mark, letters, or symbols.
+
+Final prompt:
+Use case: background-extraction. Asset type: transparent reusable full-body mascot cutout. Input image 1 is the exact original image to edit. REMOVE ONLY the dark forest-green background, floor plane, and cast shadow beneath the feet, replacing those areas with ACTUAL alpha transparency. Preserve the original character exactly: same silhouette and pose, same pear-shaped pistachio mint body, same two asymmetric sprout leaves, same glossy black oval eyes and tiny white highlights, same gentle curved smile and peach cheeks, same rounded arms and feet, same soft clay-like 3D shading and texture. Preserve the lavender speech bubble EXACTLY as shown: completely BLANK, with NO check mark, NO text, NO symbol, NO embedded mark, and no new surface detail. Do not redraw, redesign, recolor, restyle, rotate, reshape, or change the character or bubble. Keep its original placement and original proportions on the original square 1024x1024 canvas, ensuring every leaf and foot is whole. Output a genuine RGBA transparent PNG cutout, with fully opaque character materials and clean antialiased edges. No white or colored matte, no fake checkerboard, no environment, no extra objects, and no floating ground shadow. This is background removal only; no other visual changes.

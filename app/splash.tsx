@@ -3,7 +3,7 @@ import React from 'react';
 import { ScrollView, useWindowDimensions, View } from 'react-native';
 import { Text } from '../src/components/AppText';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { LogoMark, Wordmark } from '../src/components/Logo';
+import { Mascot, Wordmark } from '../src/components/Logo';
 import { Button, H1 } from '../src/components/ui';
 import { FREE_CHECKS_PER_MONTH } from '../src/data/plans';
 import { useTheme } from '../src/theme/ThemeContext';
@@ -14,7 +14,7 @@ export default function Splash() {
   const { height, fontScale } = useWindowDimensions();
   // Give enlarged text and the two actions priority over decorative artwork.
   const compactArtwork = height < 780 || fontScale > 1.2;
-  const logoSize = compactArtwork ? 104 : 136;
+  const mascotSize = compactArtwork ? 160 : 224;
   // Display lettering grows to 200%; body copy and controls keep the full system scale.
   const displayScale = Math.min(fontScale, 2) / fontScale;
 
@@ -28,16 +28,11 @@ export default function Splash() {
               accessibilityElementsHidden
               importantForAccessibility="no-hide-descendants"
               pointerEvents="none"
-              style={{ width: 224, height: logoSize + 40, alignItems: 'center', justifyContent: 'center' }}
+              style={{ alignItems: 'center', justifyContent: 'center' }}
             >
-              {/* The left-pointing tail follows the user's sketched speech bubble. */}
-              <View style={{ position: 'absolute', left: -24, bottom: 12, width: 0, height: 0, borderTopWidth: 36, borderTopColor: 'transparent', borderRightWidth: 64, borderRightColor: colors.accentSoft }} />
-              <View style={{ position: 'absolute', left: 0, right: 0, top: 8, bottom: 12, borderRadius: 44, borderBottomLeftRadius: 32, backgroundColor: colors.accentSoft }} />
-              <View style={{ transform: [{ rotate: '-6deg' }] }}>
-                <LogoMark size={logoSize} />
-              </View>
+              <Mascot size={mascotSize} />
             </View>
-            <View style={{ marginTop: 12 }}>
+            <View style={{ marginTop: 4 }}>
               <Wordmark size={44 * displayScale} />
             </View>
           </View>

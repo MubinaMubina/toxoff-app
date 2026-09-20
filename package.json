@@ -13,7 +13,7 @@
     "test:functions": "deno test --allow-env --config supabase/functions/api/deno.json supabase/functions/tests",
     "test:security": "deno test --allow-env --config supabase/functions/api/deno.json supabase/functions/tests/security_store_test.ts && node --test scripts/security-invites.test.cjs",
     "test:db": "node --test scripts/security-invites.test.cjs scripts/freemium.test.cjs",
-    "gen:assets": "python3 scripts/generate-assets.py"
+    "gen:assets": "node scripts/generate-assets.cjs"
   },
   "dependencies": {
     "@expo/vector-icons": "~14.0.4",
