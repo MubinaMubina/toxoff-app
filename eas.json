@@ -6,26 +6,30 @@
   "build": {
     "development": {
       "developmentClient": true,
-      "distribution": "internal"
+      "distribution": "internal",
+      "environment": "development"
     },
     "preview": {
       "distribution": "internal",
       "ios": {
         "simulator": true
-      }
+      },
+      "environment": "preview"
     },
     "production": {
       "autoIncrement": true,
       "ios": {
         "resourceClass": "m-medium"
-      }
+      },
+      "environment": "production"
     },
     "development-simulator": {
       "developmentClient": true,
       "distribution": "internal",
       "ios": {
         "simulator": true
-      }
+      },
+      "environment": "development"
     }
   },
   "submit": {
@@ -36,10 +40,6 @@
         "ascApiKeyPath": "/Users/Mubi/toxoff-secrets/AuthKey_NF6T7YKRPX.p8",
         "ascApiKeyId": "NF6T7YKRPX",
         "ascApiKeyIssuerId": "eea90b83-a6ed-4296-bb34-74c580e127a8"
-      },
-      "android": {
-        "serviceAccountKeyPath": "./play-service-account.json",
-        "track": "internal"
       }
     }
   }

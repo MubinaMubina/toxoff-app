@@ -49,7 +49,7 @@ export async function loadStorePackages(): Promise<Map<string, PurchasesPackage>
 
 const syncWithBackend = () => apiPost('/billing/app-store/sync');
 
-export type PurchaseResult = { status: 'demo' } | { status: 'cancelled' } | { status: 'purchased' };
+export type PurchaseResult = { status: 'demo' } | { status: 'cancelled' } | { status: 'purchased'; synced: boolean };
 
 export async function purchasePlan(
   plan: PaidPlanId,
@@ -67,17 +67,28 @@ export async function purchasePlan(
     if (e?.userCancelled) return { status: 'cancelled' };
     throw e;
   }
-  // RevenueCat's webhook reports it too; this makes the new plan show straight away.
-  await syncWithBackend();
-  return { status: 'purchased' };
+  // RevenueCat's webhook reports it too; this makes the new plan show straight away. Apple has
+  // already charged by now, so a failed sync is not a failed purchase: the webhook catches up.
+  try {
+    await syncWithBackend();
+    return { status: 'purchased', synced: true };
+  } catch (e) {
+    console.warn('Purchase made but the plan could not be synced yet', e);
+    return { status: 'purchased', synced: false };
+  }
 }
 
 /** Required by the App Store: brings back subscriptions bought with this Apple ID. */
-export async function restorePurchases(): Promise<{ status: 'demo' | 'restored' }> {
+export async function restorePurchases(): Promise<{ status: 'demo' | 'restored'; synced?: boolean }> {
   if (!storeConfigured) return { status: 'demo' };
   await Purchases.restorePurchases();
-  await syncWithBackend();
-  return { status: 'restored' };
+  try {
+    await syncWithBackend();
+    return { status: 'restored', synced: true };
+  } catch (e) {
+    console.warn('Purchases restored but the plan could not be synced yet', e);
+    return { status: 'restored', synced: false };
+  }
 }
 
 /** Apple's own page for changing plan, the payment method, or cancelling. */

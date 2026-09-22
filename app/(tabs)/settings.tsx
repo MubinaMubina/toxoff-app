@@ -19,8 +19,9 @@ import {
 } from '../../src/components/ui';
 import { useAuth } from '../../src/context/AuthContext';
 import { useModeration } from '../../src/context/ModerationContext';
-import { FREE_CHECKS_PER_MONTH, getPlan, INVITE_BONUS } from '../../src/data/plans';
+import { ADS_ENABLED, FREE_CHECKS_PER_MONTH, getPlan, INVITE_BONUS } from '../../src/data/plans';
 import { apiPost, isApiConfigured } from '../../src/lib/api';
+import { isSupabaseConfigured } from '../../src/lib/supabase';
 import { emailSupport, openLink, PRIVACY_URL, TERMS_URL } from '../../src/lib/links';
 import { registerForPushNotifications } from '../../src/lib/notifications';
 import { manageSubscription } from '../../src/lib/purchases';
@@ -51,7 +52,9 @@ export default function Settings() {
             ? `Ends ${shortDate(billing.periodEnd)}`
             : `Renews ${shortDate(billing.periodEnd)} · billed ${billing.interval === 'annual' ? 'yearly' : 'monthly'}`
         : subscription.status === 'free'
-          ? `${FREE_CHECKS_PER_MONTH} checks a month, with ads. Upgrade for unlimited, ad-free moderation.`
+          ? ADS_ENABLED
+            ? `${FREE_CHECKS_PER_MONTH} checks a month, with ads. Upgrade for unlimited, ad-free moderation.`
+            : `${FREE_CHECKS_PER_MONTH} checks a month. Upgrade for unlimited moderation.`
           : 'Manage your plan & billing';
 
   // Changing plan, the payment method, or cancelling all happen on Apple's own subscriptions page.
@@ -75,8 +78,15 @@ export default function Settings() {
       return;
     }
     setSavingPush(true);
-    const token = await registerForPushNotifications();
-    setSavingPush(false);
+    let token: string | null;
+    try {
+      token = await registerForPushNotifications();
+    } catch (e: any) {
+      Alert.alert('Could not set up notifications', e?.message ?? 'Please try again.');
+      return;
+    } finally {
+      setSavingPush(false);
+    }
     if (token === null) {
       Alert.alert(
         'Notifications are off',
@@ -109,6 +119,9 @@ export default function Settings() {
   const deleteAccount = async () => {
     setDeleting(true);
     try {
+      if (isSupabaseConfigured && !isApiConfigured) {
+        throw new Error('Account deletion is not available in this build. Email support@toxoff.app and we will delete it for you.');
+      }
       if (isApiConfigured) await apiPost('/account/delete', { confirm: true });
       await signOut().catch(() => {}); // the session is already gone on the server
       router.replace('/splash');

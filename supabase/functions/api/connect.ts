@@ -1,6 +1,6 @@
 import { seal, unseal } from './crypto.ts';
 import { db, requireUser } from './db.ts';
-import { env } from './env.ts';
+import { env, returnSchemes } from './env.ts';
 import { HttpError, json, readJson, redirect, text } from './http.ts';
 import * as instagram from './instagram.ts';
 
@@ -13,7 +13,6 @@ import * as instagram from './instagram.ts';
 //                                account linked, so it can only be linked by the person who started
 
 const TTL_MS = 10 * 60_000;
-const RETURN_SCHEMES = ['toxoff:', 'exp:']; // the app, and Expo Go while developing
 const COMMENTS_PERMISSION = 'instagram_business_manage_comments';
 
 type ConnectState = { uid: string; returnUrl: string };
@@ -33,7 +32,7 @@ export async function startConnect(req: Request): Promise<Response> {
   const { platform, returnUrl = 'toxoff://connect-accounts' } = await readJson(req);
   if (platform === 'tiktok') throw new HttpError(400, 'TikTok support is coming soon.');
   if (platform !== 'instagram') throw new HttpError(400, 'Unknown platform.');
-  if (typeof returnUrl !== 'string' || !RETURN_SCHEMES.some((s) => returnUrl.startsWith(s))) {
+  if (typeof returnUrl !== 'string' || !returnSchemes().some((s) => returnUrl.startsWith(s))) {
     throw new HttpError(400, 'Invalid return URL.');
   }
   const state = await seal('connect-state', { uid, returnUrl }, env.connectSecret(), TTL_MS);

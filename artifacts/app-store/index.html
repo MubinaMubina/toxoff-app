@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>toxoff · App Store screenshots</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --paper: #fafbf7;
+      --card: #fffefb;
+      --forest: #173f35;
+      --muted: #58665f;
+      --line: #d1d9d0;
+      --lavender: #e4ddf5;
+      --purple: #524270;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--paper);
+      color: var(--forest);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.5;
+    }
+    .page { width: min(1120px, calc(100% - 48px)); margin: 0 auto; }
+    header {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 24px;
+      padding: 48px 0 28px;
+      border-bottom: 1px solid var(--line);
+    }
+    .wordmark { margin: 0 0 18px; font-size: 25px; letter-spacing: -1.2px; }
+    .wordmark strong { font-weight: 800; }
+    .wordmark span { font-weight: 400; }
+    h1 { margin: 0; font-size: clamp(28px, 4vw, 38px); line-height: 1.15; letter-spacing: -1.2px; }
+    .meta { margin: 12px 0 0; color: var(--muted); font-size: 14px; }
+    .download {
+      display: inline-flex;
+      min-height: 48px;
+      align-items: center;
+      justify-content: center;
+      padding: 12px 20px;
+      border-radius: 8px;
+      background: var(--forest);
+      color: #fff;
+      font-size: 14px;
+      font-weight: 600;
+      text-decoration: none;
+    }
+    .download:hover { background: #285a46; }
+    a:focus-visible { outline: 3px solid var(--purple); outline-offset: 5px; }
+    .instruction { margin: 24px 0; color: var(--muted); font-size: 14px; }
+    .gallery { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; }
+    figure { margin: 0; padding: 12px; background: var(--card); border: 1px solid var(--line); border-radius: 14px; }
+    .shot { display: block; background: #edf5e9; text-decoration: none; }
+    .shot img { display: block; width: 100%; height: auto; aspect-ratio: 1320 / 2868; object-fit: contain; }
+    figcaption { display: flex; align-items: center; gap: 10px; padding: 15px 2px 3px; font-size: 15px; font-weight: 600; }
+    .number {
+      display: inline-flex;
+      flex: 0 0 30px;
+      min-height: 30px;
+      align-items: center;
+      justify-content: center;
+      background: var(--lavender);
+      color: var(--purple);
+      border-radius: 6px;
+      font-size: 12px;
+      font-variant-numeric: tabular-nums;
+    }
+    footer { padding: 32px 0 40px; color: var(--muted); font-size: 13px; }
+    @media (max-width: 800px) {
+      .page { width: min(440px, calc(100% - 32px)); }
+      header { align-items: flex-start; padding-top: 30px; }
+      .gallery { grid-template-columns: minmax(0, 1fr); gap: 20px; }
+    }
+    @media print {
+      .page { width: 100%; }
+      header { padding-top: 0; }
+      .download, .instruction, footer { display: none; }
+      .gallery { margin-top: 20px; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+      figure { break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header>
+      <div>
+        <p class="wordmark"><strong>tox</strong><span>off</span></p>
+        <h1>App Store screenshots</h1>
+        <p class="meta">6.9-inch iPhone · 1320 × 2868 pixels · Six RGB PNGs</p>
+      </div>
+      <a class="download" href="toxoff-app-store-iphone-6.9.zip" download>Download all screenshots</a>
+    </header>
+    <main>
+      <p class="instruction">Select a screenshot to open the original at full size. Use the screen number when suggesting changes.</p>
+      <div class="gallery">
+        <figure>
+          <a class="shot" href="iphone-6.9/01-home.png" target="_blank" rel="noopener" aria-label="Open screenshot 01: Home, full size">
+            <img src="iphone-6.9/01-home.png" width="1320" height="2868" alt="toxoff Home screen" decoding="async">
+          </a>
+          <figcaption><span class="number">01</span> Home</figcaption>
+        </figure>
+        <figure>
+          <a class="shot" href="iphone-6.9/02-log-deleted.png" target="_blank" rel="noopener" aria-label="Open screenshot 02: Deleted comments, full size">
+            <img src="iphone-6.9/02-log-deleted.png" width="1320" height="2868" alt="toxoff Log showing covered deleted comments" decoding="async">
+          </a>
+          <figcaption><span class="number">02</span> Deleted comments</figcaption>
+        </figure>
+        <figure>
+          <a class="shot" href="iphone-6.9/03-log-hidden.png" target="_blank" rel="noopener" aria-label="Open screenshot 03: Hidden comments, full size">
+            <img src="iphone-6.9/03-log-hidden.png" width="1320" height="2868" alt="toxoff Log showing a hidden comment and Restore control" decoding="async">
+          </a>
+          <figcaption><span class="number">03</span> Hidden comments</figcaption>
+        </figure>
+        <figure>
+          <a class="shot" href="iphone-6.9/04-filters.png" target="_blank" rel="noopener" aria-label="Open screenshot 04: Filters, full size">
+            <img src="iphone-6.9/04-filters.png" width="1320" height="2868" alt="toxoff sensitivity and comment handling filters" loading="lazy" decoding="async">
+          </a>
+          <figcaption><span class="number">04</span> Filters</figcaption>
+        </figure>
+        <figure>
+          <a class="shot" href="iphone-6.9/05-paywall.png" target="_blank" rel="noopener" aria-label="Open screenshot 05: Plans, full size">
+            <img src="iphone-6.9/05-paywall.png" width="1320" height="2868" alt="toxoff Solo, Plus, and Studio plans" loading="lazy" decoding="async">
+          </a>
+          <figcaption><span class="number">05</span> Plans</figcaption>
+        </figure>
+        <figure>
+          <a class="shot" href="iphone-6.9/06-welcome.png" target="_blank" rel="noopener" aria-label="Open screenshot 06: Welcome, full size">
+            <img src="iphone-6.9/06-welcome.png" width="1320" height="2868" alt="toxoff welcome screen with the mascot" loading="lazy" decoding="async">
+          </a>
+          <figcaption><span class="number">06</span> Welcome</figcaption>
+        </figure>
+      </div>
+    </main>
+    <footer>Native app captures using the reviewer demo account. Plans show the app’s configured USD price preview because live App Store prices were unavailable in the simulator. <a href="README.md">Capture details</a></footer>
+  </div>
+</body>
+</html>

@@ -8,7 +8,6 @@ import { FilterChip } from '../../src/components/FilterChip';
 import { LogRow } from '../../src/components/LogRow';
 import { OfflineBanner, SkeletonLogRows } from '../../src/components/Skeleton';
 import { useRouter } from 'expo-router';
-import { AdSlot } from '../../src/components/AdSlot';
 import { Button, Card, EmptyState, ScreenTitle, Segmented } from '../../src/components/ui';
 import { useAuth } from '../../src/context/AuthContext';
 import { useModeration } from '../../src/context/ModerationContext';
@@ -112,7 +111,8 @@ export default function Log() {
   const confirmErase = (ids?: string[]) => {
     const count = ids ? ids.length : deletedCount;
     if (!count) return;
-    const noun = count === 1 ? 'this deleted comment' : `${count} deleted comments`;
+    // Without ids the backend erases every deleted comment, including older ones not loaded here.
+    const noun = !ids ? 'all your deleted comments' : count === 1 ? 'this deleted comment' : `${count} deleted comments`;
     Alert.alert(
       `Erase ${noun} forever?`,
       'The words and who wrote them are wiped from your log permanently, unread. Your totals on Home still count them.',
@@ -277,7 +277,7 @@ export default function Log() {
               </View>
               <View style={{ marginTop: 14 }}>
                 <Button
-                  label={`Erase all ${deletedCount} forever`}
+                  label="Erase all deleted comments forever"
                   variant="danger"
                   size="md"
                   icon="flame-outline"
@@ -289,6 +289,7 @@ export default function Log() {
             )}
           </>
         }
+        // No ad here: the Log shows abusive text, and ads must never sit beside it.
         ListFooterComponent={
           <>
             {historyDays !== null && status === 'ready' && (
@@ -304,7 +305,6 @@ export default function Log() {
                 </Text>
               </Pressable>
             )}
-            <AdSlot placement="log_banner" />
           </>
         }
         ListEmptyComponent={

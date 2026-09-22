@@ -180,6 +180,8 @@ the check is given back and the webhook returns an error, so Meta delivers the c
 **Secrets** (`npx supabase secrets set`, never in the app):
 - `CONNECT_SECRET`, `CRON_SECRET`, `INSTAGRAM_WEBHOOK_VERIFY_TOKEN` are set. The verify token is
   also in the Keychain (`supabase-toxoff-ig-verify-token`) for Meta's dashboard.
+- `ALLOW_EXPO_GO_RETURN=true` (development only) lets connect and billing return links use Expo
+  Go's `exp://` scheme. Leave it unset in production: the backend then redirects only to `toxoff://`.
 - `INSTAGRAM_POLLING=on` turns on [comment polling](#comment-polling).
 - To add: `INSTAGRAM_APP_ID`, `INSTAGRAM_APP_SECRET`, `OPENAI_API_KEY`, `STRIPE_SECRET_KEY`,
   `STRIPE_WEBHOOK_SECRET`. Until they exist, those routes answer 503 "missing … setting".
@@ -273,7 +275,7 @@ There is no trial. Every new account starts on **Free**, for good, unless they s
 - The **log reaches back 7 days** (`plan_limits.log_history_days`, enforced by the `moderation_log`
   policy through `log_visible_since()`; rows are kept, and `moderation_counts()` still counts them
   for Home). Paid plans see everything.
-- **Ads** on Home and Log (`plan_limits.ads`). Paid plans show none.
+- **Ads** on Home (`plan_limits.ads`). Paid plans show none.
 
 Once the checks are used, comments stop being checked until the month turns, an ad is watched, a
 friend joins, or the user subscribes. **Launch market: Pakistan.** Apple Pay isn't available
@@ -455,12 +457,18 @@ failed before anything arrived. Data that did arrive stays on screen through a f
 
 ### Ads (AdMob, reported to RevenueCat Ads)
 
+**Off in version 1.** Everything in this section is behind `ADS_ENABLED` (`src/data/plans.ts`), which is
+true only when the build's environment has `EXPO_PUBLIC_ADS=on`. While it is off the app shows, asks
+and loads nothing to do with ads, and the plan lists, paywall, Settings and Home don't mention them.
+Turn it on once Google approves the AdMob account, and update the store listing as
+[`STORE_LISTING.md`](STORE_LISTING.md) describes.
+
 The Free plan shows ads; paid plans don't. Google AdMob serves them
 (`react-native-google-mobile-ads`, `src/lib/ads.ts`), and every load, impression, click, failure
 and paid event is sent to RevenueCat's ad tracker (`Purchases.adTracker`) so ad revenue shows next
 to subscriptions in RevenueCat. RevenueCat doesn't serve ads itself.
 
-- **Banner** (`src/components/AdSlot.tsx`): bottom of Home and Log. Renders nothing for paying
+- **Banner** (`src/components/AdSlot.tsx`): bottom of Home only (never beside the abusive text in the Log). Renders nothing for paying
   users, in Expo Go, or when no ad filled.
 - **Rewarded ad** (`useRewardedAd`, Home's checks meter): "Watch an ad for +5 checks". The app
   asks Google to include the toxoff user id in its **server-side verification** callback
@@ -557,12 +565,11 @@ eas build --platform android --profile production
 
 # Submit
 eas submit --platform ios --profile production
-eas submit --platform android --profile production
 ```
 
 Before submitting, fill in `eas.json > submit.production`:
 - **iOS**: `appleId`, `ascAppId` (App Store Connect app id), `appleTeamId`.
-- **Android**: `serviceAccountKeyPath` (Play Console service-account JSON) and `track`.
+- **Android**: not set up; add a submit profile with `serviceAccountKeyPath` and `track` when a Play listing exists.
 
 Also replace the placeholder `extra.eas.projectId` in `app.json` (set automatically by
 `eas build:configure`). The store assets in `assets/` (icon, adaptive icon, splash, favicon,
@@ -576,6 +583,25 @@ The app's colours
 [`assets/fonts/README.md`](assets/fonts/README.md) for font sources and licensing. Native layouts
 keep 20pt gutters, 8pt button corners and 14pt card corners. New installs default to light mode;
 saved theme choices are retained, with the same palette adapted for dark mode.
+
+### Reviewer login and listing text
+
+App reviewers can't connect an Instagram account (until Meta's review, only tester accounts can),
+so they get a login that already has data: `appreview@toxoff.app`.
+
+- `node scripts/seed-reviewer.cjs` creates or resets it. The password is generated on first run
+  and kept in the macOS Keychain (`toxoff-reviewer-password`); it is never printed. Copy it with
+  `security find-generic-password -s toxoff-reviewer-password -w | pbcopy`.
+- `supabase/migrations/20260921100000_reviewer_demo.sql`: `profiles.reviewer` marks the login,
+  `accounts.demo` marks its sample Instagram account (no token, so never polled or refreshed), and
+  `seed_reviewer_demo(uid)` puts back 12 sample comments dated within the last six days. The
+  pg_cron job `refresh-reviewer-demo` runs it daily, so the samples stay inside Free's 7-day log.
+  Sample comments have no `comment_id`; real ones are never touched.
+- Restoring a hidden sample only updates the log (`supabase/functions/api/comments.ts`); there is
+  no comment on Instagram to un-hide.
+- [`STORE_LISTING.md`](STORE_LISTING.md) has the text for every App Store Connect field, the review
+  notes, the privacy-label answers and the screenshot list. The first release is iPhone-only
+  (`supportsTablet: false`): Apple allows adding iPad later but never removing it.
 
 > **Store review note:** Instagram API access and removing comments require
 > approved platform permissions and a public privacy policy. Have those ready before

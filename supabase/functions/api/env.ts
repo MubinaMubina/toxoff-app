@@ -5,7 +5,10 @@ import { HttpError } from './http.ts';
 // `npx supabase secrets set NAME=value` (README > Moderation backend).
 function setting(name: string): string {
   const value = Deno.env.get(name);
-  if (!value) throw new HttpError(503, `The server is missing the ${name} setting.`);
+  if (!value) {
+    console.error(`Missing server setting: ${name}`);
+    throw new HttpError(503, 'The server is not fully configured. Please try again later.');
+  }
   return value;
 }
 
@@ -13,6 +16,13 @@ function setting(name: string): string {
 function count(name: string, fallback: number): number {
   const value = Number(Deno.env.get(name));
   return Number.isInteger(value) && value > 0 ? value : fallback;
+}
+
+// Return URLs the backend may redirect a browser to. Expo Go's exp:// scheme is accepted only when
+// ALLOW_EXPO_GO_RETURN=true (development): in production an exp:// redirect would let anyone
+// point a link that looks like ours at their own Expo bundle.
+export function returnSchemes(): string[] {
+  return Deno.env.get('ALLOW_EXPO_GO_RETURN') === 'true' ? ['toxoff:', 'exp:'] : ['toxoff:'];
 }
 
 export const env = {

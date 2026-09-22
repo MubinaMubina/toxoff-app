@@ -3,9 +3,14 @@ import { PaidPlanId, Plan, PlanId } from '../types';
 // Pricing lives in src/data/pricing.ts (location-based). Plans here describe the
 // feature set / limits; the region decides the actual price + currency.
 // Limits are mirrored server-side in public.plan_limits (supabase/migrations).
+// Ads on the Free plan (the Home banner and rewarded ads). Off for version 1, while Google hasn't
+// approved the AdMob account: nothing about ads is shown, asked or loaded. EXPO_PUBLIC_ADS=on in
+// the build's environment brings all of it back.
+export const ADS_ENABLED = process.env.EXPO_PUBLIC_ADS === 'on';
+
 export const PAID_PLAN_COMMON_FEATURES = [
   'Unlimited comments moderated',
-  'No ads',
+  ...(ADS_ENABLED ? ['No ads'] : []),
   '100+ languages',
   'All toxicity categories',
   'Custom keyword blocklist',
@@ -37,18 +42,18 @@ export const PLANS: Plan[] = [
     maxAccounts: 1,
     keywordBlocklist: false,
     blockedUsers: false,
-    ads: true,
+    ads: ADS_ENABLED,
     logHistoryDays: FREE_LOG_HISTORY_DAYS,
     tagline: 'toxoff on one account, free forever',
     features: [
       '1 Instagram account',
       `${FREE_CHECKS_PER_MONTH} comment checks a month`,
-      `Watch an ad for ${AD_REWARD_CHECKS} more, up to ${AD_REWARDS_PER_DAY} a day`,
+      ...(ADS_ENABLED ? [`Watch an ad for ${AD_REWARD_CHECKS} more, up to ${AD_REWARDS_PER_DAY} a day`] : []),
       `${INVITE_BONUS} more for each friend you invite (up to ${MAX_INVITE_REWARDS})`,
       `Last ${FREE_LOG_HISTORY_DAYS} days of your log`,
       '100+ languages',
       'All toxicity categories',
-      'Shows ads',
+      ...(ADS_ENABLED ? ['Shows ads'] : []),
     ],
   },
   {

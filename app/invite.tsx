@@ -23,7 +23,7 @@ export default function Invite() {
   const params = useLocalSearchParams<{ code?: string }>();
   const [status, setStatus] = useState<InviteStatus | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [friendCode, setFriendCode] = useState(params.code ?? '');
+  const [friendCode, setFriendCode] = useState(Array.isArray(params.code) ? params.code[0] ?? '' : params.code ?? '');
   const [redeeming, setRedeeming] = useState(false);
 
   // Only the latest request updates the screen, so a slow earlier one can't bring back an old error.

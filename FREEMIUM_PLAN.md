@@ -1,7 +1,7 @@
 # toxoff: freemium with ads (replacing the 7-day trial)
 
 Written 16 September 2026 as an outline; **built the same day** with the numbers you chose:
-50 checks a month, +5 per rewarded ad, 2 ads a day, a 7-day log on Free, banners on Home and Log,
+50 checks a month, +5 per rewarded ad, 2 ads a day, a 7-day log on Free, a banner on Home only (the Log banner was removed on 21 Sep 2026: no ads beside abusive text),
 no interstitials. The migration is on the hosted database and the backend is deployed. What's
 left needs your accounts (AdMob, Apple, Expo) and is listed in PROGRESS.md. The rest of this file
 is the outline as agreed, kept for the reasoning.
@@ -49,7 +49,7 @@ Duolingo's model is: a real free product, a renewable allowance ("hearts"), ads 
 | Keyword blocklist | no | yes | yes | yes |
 | Blocked users | no | no | yes | yes |
 | Log history | last 7 days | full | full | full |
-| Ads | banner on Home and Log; rewarded ads when checks run low | none | none | none |
+| Ads | banner on Home; rewarded ads when checks run low | none | none | none |
 
 Kept on Free because it's the product's whole value: AI filtering, Auto hide-or-delete,
 push notifications, the daily summary, Restore. No interstitial ads anywhere: toxoff is a
@@ -163,7 +163,7 @@ limits, keyword and blocked-user rules and log history are all decided in SQL, a
   paying. Everything below is a no-op otherwise, so Expo Go and the demo keep working.
 - `initAds()`: gather EEA consent (Google's UMP form, built into the SDK), ask ATT, initialise.
   Called once after sign-in, and again when `subscription.paying` flips.
-- `<AdSlot placement="home" | "log" />`: an adaptive banner. Renders nothing for paying users
+- `<AdSlot placement="home_banner" />`: an adaptive banner. Renders nothing for paying users
   or when ads aren't configured, so layouts don't need two versions.
 - `useRewardedAd()`: loads a rewarded ad with server-side verification options (user id +
   nonce in `custom_data`), shows it, and after "earned reward" waits for the realtime profile
@@ -174,7 +174,7 @@ limits, keyword and blocked-user rules and log history are all decided in SQL, a
   judges.
 
 **Placements and frequency**
-- Banner: bottom of Home and Log tabs, Free only. Nowhere else.
+- Banner: bottom of the Home tab, Free only. Nowhere else, and never on the Log.
 - Rewarded: only from the checks meter and the out-of-checks state. Server cap of 4 a day.
 - No interstitials, no app-open ads. Revisit after launch with RevenueCat's ads charts.
 
@@ -207,5 +207,5 @@ limits, keyword and blocked-user rules and log history are all decided in SQL, a
 - Monthly allowance: **50 a month** (not a lifetime cap).
 - **5 checks per ad, 2 ads a day**, offered whenever the app is opened and ads remain that day.
 - Log history on Free: **7 days**.
-- Free keeps Auto hide-or-delete and push notifications. Banners on Home and Log only; no
+- Free keeps Auto hide-or-delete and push notifications. Banner on Home only; no
   interstitials.

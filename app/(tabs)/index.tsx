@@ -13,7 +13,7 @@ import { Skeleton, SkeletonRows } from '../../src/components/Skeleton';
 import { Badge, Button, Card, LIST_ROW, RowIcon, RowSeparator, SectionLabel, Segmented } from '../../src/components/ui';
 import { useAuth } from '../../src/context/AuthContext';
 import { useModeration } from '../../src/context/ModerationContext';
-import { AD_REWARD_CHECKS, AD_REWARDS_PER_DAY, getPlan } from '../../src/data/plans';
+import { AD_REWARD_CHECKS, AD_REWARDS_PER_DAY, ADS_ENABLED, getPlan } from '../../src/data/plans';
 import { useRewardedAd } from '../../src/lib/ads';
 import { getProtectionSummary } from '../../src/lib/protection';
 import { shortDate, timeAgo } from '../../src/lib/time';
@@ -44,7 +44,14 @@ export default function Dashboard() {
   // Watching a rewarded ad: Google confirms the view to the backend, which adds the checks; the
   // meter updates live when they land (and is re-read as a fallback).
   const watchAd = async () => {
-    const outcome = await rewarded.watch();
+    let outcome: Awaited<ReturnType<typeof rewarded.watch>>;
+    try {
+      outcome = await rewarded.watch();
+    } catch (e) {
+      console.warn('Rewarded ad failed', e);
+      Alert.alert('No ad available right now', 'Please try again in a little while.');
+      return;
+    }
     if (outcome === 'demo') {
       Alert.alert('Ads run in the App Store build', `There, watching a short ad adds ${AD_REWARD_CHECKS} comment checks, up to ${AD_REWARDS_PER_DAY} ads a day.`);
     } else if (outcome === 'unavailable') {
@@ -55,7 +62,7 @@ export default function Dashboard() {
     }
   };
   const monthLeft = Math.max(0, freeChecks.allowance - freeChecks.used);
-  const summary = getProtectionSummary({ accounts, maxAccounts: plan.maxAccounts, outOfFreeChecks, status });
+  const summary = getProtectionSummary({ accounts, maxAccounts: plan.maxAccounts, outOfFreeChecks, adsEnabled: ADS_ENABLED, status });
   const firstName = user?.name?.split(' ')[0] ?? 'Creator';
   const loading = status === 'loading';
   const activityUnavailable = status === 'offline' && !lastSyncedAt;
@@ -137,7 +144,7 @@ export default function Dashboard() {
                 ? 'Usage unavailable'
                 : `${monthLeft} of ${freeChecks.allowance} checks left this month${freeChecks.bonus > 0 ? ` · +${freeChecks.bonus} extra` : ''}`}
             </Text>
-            {!activityUnavailable && (freeChecks.adsLeftToday > 0 ? (
+            {ADS_ENABLED && !activityUnavailable && (freeChecks.adsLeftToday > 0 ? (
               <Button
                 label={`Watch an ad for +${AD_REWARD_CHECKS} checks`}
                 icon="play-circle-outline"

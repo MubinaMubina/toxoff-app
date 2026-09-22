@@ -7,7 +7,7 @@ import type { PurchasesPackage } from 'react-native-purchases';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button, H1, HeaderButton } from '../src/components/ui';
 import { useAuth } from '../src/context/AuthContext';
-import { FREE_CHECKS_PER_MONTH, getPlan, PAID_PLAN_COMMON_FEATURES, PAID_PLANS } from '../src/data/plans';
+import { ADS_ENABLED, FREE_CHECKS_PER_MONTH, getPlan, PAID_PLAN_COMMON_FEATURES, PAID_PLANS } from '../src/data/plans';
 import {
   annualSavings,
   formatUsd,
@@ -80,7 +80,7 @@ export default function Paywall() {
     cancelling && billing?.periodEnd
       ? `Your ${getPlan(billing.plan).name} plan ends ${shortDate(billing.periodEnd)}. Choose a plan to keep going.`
       : subscription.status === 'free'
-        ? 'Unlimited moderation, no ads, more accounts, and custom rules. Cancel anytime.'
+        ? `Unlimited moderation, ${ADS_ENABLED ? 'no ads, ' : ''}more accounts, and custom rules. Cancel anytime.`
         : 'Change your plan anytime.';
 
   const priceOf = (plan: PaidPlanId) => {
@@ -129,6 +129,11 @@ export default function Paywall() {
       }
       const result = await purchasePlan(selected, interval, packages);
       if (result.status === 'cancelled') return;
+      if (result.status === 'purchased' && !result.synced) {
+        Alert.alert('Purchase complete', `You're on ${selectedName}. Your plan will show here in a moment.`);
+        router.back();
+        return;
+      }
       if (result.status === 'demo') {
         const periodEnd = new Date();
         if (interval === 'annual') periodEnd.setFullYear(periodEnd.getFullYear() + 1);
@@ -308,7 +313,7 @@ export default function Paywall() {
           ))}
           <Text style={{ color: colors.textMuted, fontSize: font.size.sm, lineHeight: 20, marginTop: 2 }}>
             Plus and Studio also include a blocked users list and priority support. Free stays free:
-            {' '}{FREE_CHECKS_PER_MONTH} checks a month on one account, with ads.
+            {' '}{FREE_CHECKS_PER_MONTH} checks a month on one account{ADS_ENABLED ? ', with ads' : ''}.
           </Text>
         </View>
 

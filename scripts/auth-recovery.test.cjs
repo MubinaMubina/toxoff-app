@@ -17,7 +17,7 @@ new Function('module', 'exports', compile('src/lib/passwordRecovery.ts'))(helper
 const providerCode = compile('src/context/AuthContext.tsx');
 const tick = () => new Promise((resolve) => setImmediate(resolve));
 
-function setup({ initialUrl = null, marker = null, holdMarker = false, exchangeEvent = 'PASSWORD_RECOVERY' } = {}) {
+function setup({ initialUrl = null, marker = null, holdMarker = false, exchangeEvent = 'PASSWORD_RECOVERY', exchangeFails = false } = {}) {
   const hooks = [];
   let cursor = 0;
   let effects = [];
@@ -25,7 +25,7 @@ function setup({ initialUrl = null, marker = null, holdMarker = false, exchangeE
   let releaseMarker;
   let userError = null;
   let sessionError = null;
-  const calls = { profiles: 0, updates: 0, purchaserIds: [] };
+  const calls = { profiles: 0, updates: 0, purchaserIds: [], signOuts: 0 };
   const session = {
     access_token: 'fixture-recovery-token',
     expires_at: Math.floor(Date.now() / 1000) + 3600,
@@ -72,11 +72,11 @@ function setup({ initialUrl = null, marker = null, holdMarker = false, exchangeE
   const supabase = {
     auth: {
       onAuthStateChange: (callback) => { listener = callback; return { data: { subscription: { unsubscribe() {} } } }; },
-      exchangeCodeForSession: async () => { listener(exchangeEvent, session); return { data: { session }, error: null }; },
+      exchangeCodeForSession: async () => { if (exchangeFails) return { data: { session: null }, error: new Error('invalid flow state') }; listener(exchangeEvent, session); return { data: { session }, error: null }; },
       getUser: async () => userError ? { data: { user: null }, error: userError } : { data: { user: session.user }, error: null },
       getSession: async () => sessionError ? { data: { session: null }, error: sessionError } : { data: { session }, error: null },
       updateUser: async () => { calls.updates += 1; listener('USER_UPDATED', session); return { data: { user: session.user }, error: null }; },
-      signOut: async () => { listener('SIGNED_OUT', null); return { error: null }; },
+      signOut: async () => { calls.signOuts += 1; listener('SIGNED_OUT', null); return { error: null }; },
     },
     from: () => { calls.profiles += 1; return query; },
     channel: () => channel,
@@ -90,6 +90,7 @@ function setup({ initialUrl = null, marker = null, holdMarker = false, exchangeE
     'expo-apple-authentication': {},
     'expo-auth-session': {},
     'expo-crypto': {},
+    'react-native': { Alert: { alert() {} } },
   };
   const requireMock = (id) => {
     if (id in mocks) return mocks[id];
@@ -186,4 +187,13 @@ test('an ordinary sign-in callback cannot unlock the reset form', async () => {
   assert.equal(value.user, null);
   await assert.rejects(value.resetPassword('fixture-password'), /expired or could not be verified/);
   assert.equal(app.calls.updates, 0);
+});
+
+test('a bogus reset link cannot sign out a logged-in user', async () => {
+  const app = setup({ initialUrl: 'toxoff://reset-password?code=bad-code', exchangeEvent: 'SIGNED_IN', exchangeFails: true });
+  app.emit('INITIAL_SESSION');
+  const value = await app.settle();
+  assert.equal(value.passwordRecovery, 'idle');
+  assert.equal(value.user?.id, 'fixture-user');
+  assert.equal(app.calls.signOuts, 0);
 });

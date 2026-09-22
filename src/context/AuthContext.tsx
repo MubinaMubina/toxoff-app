@@ -5,6 +5,7 @@ import * as AuthSession from 'expo-auth-session';
 import * as Crypto from 'expo-crypto';
 import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
+import { Alert } from 'react-native';
 import React, {
   createContext,
   useCallback,
@@ -69,6 +70,9 @@ type AuthValue = {
   leavePasswordRecovery: () => Promise<void>;
   /** false until the user finishes (or skips) onboarding; null while the profile is loading. */
   onboarded: boolean | null;
+  /** Set when the profile couldn't be read (offline, or the account is gone); retryProfile tries again. */
+  profileError: string | null;
+  retryProfile: () => void;
   completeOnboarding: () => Promise<void>;
   signUp: (email: string, password: string, name: string) => Promise<{ needsConfirmation: boolean }>;
   signIn: (email: string, password: string) => Promise<void>;
@@ -161,6 +165,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const recoveryQueue = useRef<Promise<void>>(Promise.resolve());
   // Demo mode: existing "accounts" count as onboarded; a demo sign-up goes through onboarding.
   const [onboarded, setOnboarded] = useState<boolean | null>(isSupabaseConfigured ? null : true);
+  const [profileError, setProfileError] = useState<string | null>(null);
+  const [profileAttempt, setProfileAttempt] = useState(0);
+  const retryProfile = useCallback(() => setProfileAttempt((n) => n + 1), []);
   const userId = user?.id ?? null;
 
   const changeRecoveryState = useCallback((state: PasswordRecoveryState) => {
@@ -198,6 +205,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     lastRecoveryUrl.current = url;
     recoverySession.current = null;
     recoveryEvent.current = null;
+    // A signed-in session survives a bad link (anyone can send toxoff://reset-password?code=x);
+    // only a link that really opens a recovery session replaces it.
+    const { data: before } = await supabase.auth.getSession().catch(() => ({ data: { session: null } }));
+    const hadSession = Boolean(before.session);
+    let exchanged = false; // once true, the stored session is the link's, not the old one
     changeRecoveryState('verifying');
     setUser(null);
     try {
@@ -207,6 +219,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (callback.kind !== 'code' || !isSupabaseConfigured) throw new Error('Invalid recovery');
       const { data, error } = await supabase.auth.exchangeCodeForSession(callback.code);
       if (error || !data.session) throw new Error('Invalid recovery');
+      exchanged = true;
       const { data: verified, error: verificationError } = await supabase.auth.getUser(data.session.access_token);
       if (verificationError || !isVerifiedRecoverySession(recoveryEvent.current, data.session, verified.user?.id ?? null)) {
         throw new Error('Invalid recovery');
@@ -218,6 +231,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       };
       changeRecoveryState('ready');
     } catch {
+      if (hadSession && !exchanged) {
+        // The exchange failed, so the stored session is untouched: go back to it.
+        await AsyncStorage.removeItem(PASSWORD_RECOVERY_STORAGE_KEY).catch(() => {});
+        changeRecoveryState('idle');
+        const { data: after } = await supabase.auth.getSession().catch(() => ({ data: { session: null } }));
+        setUser(after.session?.user ? toAppUser(after.session.user) : null);
+        Alert.alert('Password reset link not valid', 'That link has expired or was already used. You are still logged in.');
+        return;
+      }
       changeRecoveryState('invalid');
     }
   }, [changeRecoveryState]);
@@ -314,6 +336,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (error) throw error;
     setSubscription(toSubscription(data as ProfileRow));
     setOnboarded((data as ProfileRow).onboarded_at !== null);
+    setProfileError(null);
   }, []);
 
   useEffect(() => {
@@ -321,9 +344,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!userId) {
       setSubscription(FREE);
       setOnboarded(null);
+      setProfileError(null);
       return;
     }
-    loadSubscription(userId).catch((e) => console.warn('Could not load subscription', e));
+    let cancelled = false;
+    loadSubscription(userId).catch((e) => {
+      console.warn('Could not load subscription', e);
+      if (cancelled) return;
+      // PGRST116: no row. The account was deleted (or never got a profile); this session is dead.
+      if (e?.code === 'PGRST116') {
+        void supabase.auth.signOut({ scope: 'local' });
+        return;
+      }
+      setProfileError("Couldn't load your account. Check your connection and try again.");
+    });
 
     // The App Store's webhooks (through RevenueCat) change the subscription on the server
     // (renewals, cancellations, billing problems); show it as it happens.
@@ -340,9 +374,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       )
       .subscribe();
     return () => {
+      cancelled = true;
       supabase.removeChannel(channel);
     };
-  }, [userId, loadSubscription]);
+  }, [userId, loadSubscription, profileAttempt]);
 
   // Purchases belong to the toxoff user, so RevenueCat's webhooks can name them.
   useEffect(() => {
@@ -446,7 +481,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signOut = async () => {
-    if (isSupabaseConfigured) await supabase.auth.signOut();
+    if (isSupabaseConfigured) {
+      // Offline, auth-js returns the network error without clearing the stored session, so the
+      // device would still be signed in on the next launch. Clear it locally in that case.
+      const { error } = await supabase.auth.signOut();
+      if (error) {
+        const { error: localError } = await supabase.auth.signOut({ scope: 'local' });
+        if (localError) throw new Error('Could not log out. Check your connection and try again.');
+      }
+    }
     setUser(null);
     setSubscription(FREE);
     setOnboarded(isSupabaseConfigured ? null : true);
@@ -469,12 +512,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [userId, loadSubscription]);
 
   // Demo mode stands in for the App Store here; null ends the subscription.
-  const setDemoBilling = (billing: Billing | null) =>
+  const setDemoBilling = (billing: Billing | null) => {
+    if (isSupabaseConfigured) return; // real accounts get their plan from the server only
     setSubscription((s) =>
       billing
         ? { ...s, plan: billing.plan, status: 'active', billing, paying: true }
         : { ...s, plan: 'free', status: 'free', billing: null, paying: false }
     );
+  };
 
   const value = useMemo<AuthValue>(
     () => ({
@@ -486,6 +531,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       resetPassword,
       leavePasswordRecovery,
       onboarded,
+      profileError,
+      retryProfile,
       completeOnboarding,
       signUp,
       signIn,
@@ -495,7 +542,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       refreshSubscription,
       setDemoBilling,
     }),
-    [user, subscription, loading, passwordRecovery, requestPasswordReset, resetPassword, leavePasswordRecovery, onboarded, completeOnboarding, refreshSubscription]
+    [user, subscription, loading, passwordRecovery, requestPasswordReset, resetPassword, leavePasswordRecovery, onboarded, profileError, retryProfile, completeOnboarding, refreshSubscription]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

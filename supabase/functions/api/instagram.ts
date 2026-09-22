@@ -30,7 +30,11 @@ export class InstagramError extends Error {
 export type Token = { accessToken: string; expiresAt: string };
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, init);
+  // Graph URLs carry the access token (and the OAuth ones the app secret). A failed fetch keeps
+  // the URL in its cause chain, which console.error would print, so the error is replaced here.
+  const res = await fetch(url, init).catch((e) => {
+    throw new InstagramError(0, `Instagram could not be reached (${e instanceof Error ? e.name : 'error'})`);
+  });
   const body = await res.json().catch(() => ({}));
   // Graph errors are { error: {...} }; the OAuth endpoint's are flat { error_message, code }.
   const error = body?.error ?? (body?.error_message ? body : null);

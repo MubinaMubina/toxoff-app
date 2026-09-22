@@ -13,6 +13,8 @@ type ProtectionInput = {
   accounts: readonly ConnectedAccount[];
   maxAccounts: number;
   outOfFreeChecks: boolean;
+  /** Whether rewarded ads are on (ADS_ENABLED in src/data/plans.ts); decides what to suggest. */
+  adsEnabled?: boolean;
   status: 'loading' | 'ready' | 'offline';
 };
 
@@ -21,6 +23,7 @@ export function getProtectionSummary({
   accounts,
   maxAccounts,
   outOfFreeChecks,
+  adsEnabled = false,
   status,
 }: ProtectionInput): ProtectionSummary {
   if (status === 'loading') {
@@ -61,7 +64,9 @@ export function getProtectionSummary({
     return {
       kind: 'quota',
       title: 'Your free checks are used up',
-      description: 'New comments aren’t being checked. Watch an ad for more checks, or upgrade to keep moderation running.',
+      description: adsEnabled
+        ? 'New comments aren’t being checked. Watch an ad for more checks, or upgrade to keep moderation running.'
+        : 'New comments aren’t being checked. Invite a friend for more checks, or upgrade to keep moderation running.',
       activeCount: 0,
       tone: 'warning',
       action: 'upgrade',

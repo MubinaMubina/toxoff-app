@@ -1,4 +1,4 @@
-import { db, markNeedsReconnect, requireUser } from './db.ts';
+import { db, markNeedsReconnect, requireUser, throttle } from './db.ts';
 import { HttpError, json, readJson } from './http.ts';
 import { InstagramError, setCommentHidden } from './instagram.ts';
 
@@ -7,6 +7,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 // "Restore" in the app's log: un-hides the comment on Instagram, then marks the log row restored.
 export async function restoreComment(req: Request): Promise<Response> {
   const uid = await requireUser(req);
+  await throttle('restore', uid, 30);
   const { commentId } = await readJson(req);
   if (typeof commentId !== 'string' || !UUID.test(commentId)) {
     throw new HttpError(404, 'Comment not found.');
@@ -23,6 +24,25 @@ export async function restoreComment(req: Request): Promise<Response> {
   if (row.action === 'deleted') {
     throw new HttpError(409, "This comment was deleted, so it can't be restored.");
   }
+  // The reviewer login's sample comments (seed_reviewer_demo) aren't on Instagram: only the log changes.
+  const sample = !row.comment_id && row.account_id ? await isDemoAccount(row.account_id) : false;
+  if (!sample) await unhideOnInstagram(row);
+
+  const { error: updateError } = await db()
+    .from('moderation_log')
+    .update({ restored: true })
+    .eq('id', row.id);
+  if (updateError) throw updateError;
+  return json({ ok: true });
+}
+
+async function isDemoAccount(accountId: string): Promise<boolean> {
+  const { data, error } = await db().from('accounts').select('demo').eq('id', accountId).maybeSingle();
+  if (error) throw error;
+  return data?.demo === true;
+}
+
+async function unhideOnInstagram(row: { platform: string; comment_id: string | null; account_id: string | null }) {
   if (row.platform !== 'instagram' || !row.comment_id || !row.account_id) {
     throw new HttpError(409, "This comment can't be restored from toxoff.");
   }
@@ -49,13 +69,6 @@ export async function restoreComment(req: Request): Promise<Response> {
     console.error('Instagram unhide failed', e);
     throw new HttpError(502, "Instagram didn't respond. Please try again.");
   }
-
-  const { error: updateError } = await db()
-    .from('moderation_log')
-    .update({ restored: true })
-    .eq('id', row.id);
-  if (updateError) throw updateError;
-  return json({ ok: true });
 }
 
 /** Rows to erase: every one of the user's deleted comments, or just the ids given. */

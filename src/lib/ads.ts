@@ -3,17 +3,22 @@ import * as Crypto from 'expo-crypto';
 import { useCallback, useRef, useState } from 'react';
 import { Platform } from 'react-native';
 import Purchases, { AdFormat, AdMediatorName, AdRevenuePrecision } from 'react-native-purchases';
+import { ADS_ENABLED } from '../data/plans';
 import { purchasesConfigured, storeConfigured } from './purchases';
 
 /**
  * Ads on the Free plan: Google AdMob, reported to RevenueCat ("RevenueCat Ads") so ad revenue sits
  * next to subscriptions in its dashboard.
  *
- * - A banner at the bottom of Home and Log (src/components/AdSlot.tsx).
+ * - A banner at the bottom of Home (src/components/AdSlot.tsx). Never on the Log: ads must not
+ *   sit beside the abusive text shown there.
  * - Rewarded ads from the checks meter on Home: watching one earns AD_REWARD_CHECKS more comment
  *   checks. The reward is added ONLY when Google's servers confirm the view to the backend
  *   (server-side verification, supabase/functions/api/ads.ts); the app just asks Google to include
  *   the toxoff user id in that callback and then waits for the profile to update.
+ *
+ * All of it is behind ADS_ENABLED (src/data/plans.ts, EXPO_PUBLIC_ADS=on). While that is off, as in
+ * version 1, no consent form, tracking prompt, SDK start-up, banner or rewarded button exists.
  *
  * The AdMob SDK is native, so none of this runs in Expo Go: there, and for paying users, every
  * entry point is a no-op (adsConfigured = false, `watch` answers 'demo'). The app id lives in
@@ -24,7 +29,7 @@ import { purchasesConfigured, storeConfigured } from './purchases';
 type GoogleAds = typeof import('react-native-google-mobile-ads');
 
 const inExpoGo = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
-export const adsConfigured = Platform.OS === 'ios' && !inExpoGo;
+export const adsConfigured = ADS_ENABLED && Platform.OS === 'ios' && !inExpoGo;
 
 let sdk: GoogleAds | null = null;
 /** The AdMob SDK, loaded only where its native module exists. */
@@ -68,7 +73,10 @@ export function initAds(): Promise<void> {
     // keeps real ad units safe to use while developing (and lets Google's reward callback fire).
     if (__DEV__) await g.default().setRequestConfiguration({ testDeviceIdentifiers: ['EMULATOR'] });
     await g.default().initialize();
-  })();
+  })().catch((e) => {
+    initialized = null; // so the next ad request tries again instead of failing for the whole run
+    throw e;
+  });
   return initialized;
 }
 
@@ -77,7 +85,7 @@ export const requestOptions = () => ({ requestNonPersonalizedAdsOnly: !personali
 
 // ---- RevenueCat Ads: every ad event goes to RevenueCat's ad tracker ----
 
-export type AdPlacement = 'home_banner' | 'log_banner' | 'checks_reward';
+export type AdPlacement = 'home_banner' | 'checks_reward';
 
 const tracker = () => (storeConfigured && purchasesConfigured() ? Purchases.adTracker : null);
 const format = (placement: AdPlacement) => (placement === 'checks_reward' ? AdFormat.rewarded : AdFormat.banner);

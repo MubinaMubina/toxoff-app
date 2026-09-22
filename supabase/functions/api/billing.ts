@@ -1,5 +1,5 @@
 import { db, requireUser } from './db.ts';
-import { env } from './env.ts';
+import { env, returnSchemes } from './env.ts';
 import { HttpError, json, readJson, redirect, text } from './http.ts';
 import * as stripe from './stripe.ts';
 
@@ -18,7 +18,6 @@ const INTERVALS = ['monthly', 'annual'] as const;
 type Plan = (typeof PLANS)[number];
 type Interval = (typeof INTERVALS)[number];
 
-const RETURN_SCHEMES = ['toxoff:', 'exp:']; // the app, and Expo Go while developing
 
 // Each price carries a lookup key, set in the Stripe dashboard: toxoff_solo_monthly,
 // toxoff_solo_annual, toxoff_plus_monthly and toxoff_plus_annual. The app never names prices.
@@ -250,7 +249,7 @@ export async function cancel(req: Request): Promise<Response> {
 export async function portal(req: Request): Promise<Response> {
   const uid = await requireUser(req);
   const { returnUrl = 'toxoff://settings' } = await readJson(req);
-  if (typeof returnUrl !== 'string' || !RETURN_SCHEMES.some((s) => returnUrl.startsWith(s))) {
+  if (typeof returnUrl !== 'string' || !returnSchemes().some((s) => returnUrl.startsWith(s))) {
     throw new HttpError(400, 'Invalid return URL.');
   }
   const customer = await customerRow(uid);
@@ -263,7 +262,7 @@ export async function portal(req: Request): Promise<Response> {
 // The portal's "Return to toxoff" link is a web address (this one); it hands over to the app.
 export function billingReturn(url: URL): Response {
   const to = url.searchParams.get('to') ?? '';
-  if (!RETURN_SCHEMES.some((s) => to.startsWith(s))) return text('You can go back to toxoff now.', 400);
+  if (!returnSchemes().some((s) => to.startsWith(s))) return text('You can go back to toxoff now.', 400);
   return redirect(to);
 }
 

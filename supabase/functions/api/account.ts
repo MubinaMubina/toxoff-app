@@ -20,8 +20,13 @@ export async function deleteAccount(req: Request): Promise<Response> {
   const uid = await requireUser(req);
   requireConfirmation(await readJson(req));
 
+  // The account goes first: if this fails the user keeps everything, including their RevenueCat
+  // subscriber record (deleting that first would have set a paying user to Free on the next sync).
+  const { error } = await db().auth.admin.deleteUser(uid);
+  if (error) throw error;
+
   // RevenueCat keeps a subscriber record keyed by the toxoff user id; drop it when we can. The
-  // key isn't set until the App Store is wired up, and a failure here must not block deletion.
+  // key isn't set until the App Store is wired up, and a failure here must not undo deletion.
   try {
     const res = await fetch(`https://api.revenuecat.com/v1/subscribers/${encodeURIComponent(uid)}`, {
       method: 'DELETE',
@@ -31,8 +36,5 @@ export async function deleteAccount(req: Request): Promise<Response> {
   } catch (e) {
     console.warn('RevenueCat subscriber not deleted:', e instanceof Error ? e.message : e);
   }
-
-  const { error } = await db().auth.admin.deleteUser(uid);
-  if (error) throw error;
   return json({ deleted: true });
 }

@@ -12,7 +12,7 @@ import { ThemeProvider, useTheme } from '../src/theme/ThemeContext';
 
 function Navigator({ fontsPending }: { fontsPending: boolean }) {
   const { colors, isDark } = useTheme();
-  const { passwordRecovery, loading } = useAuth();
+  const { passwordRecovery, loading, user } = useAuth();
   const router = useRouter();
   const segments = useSegments();
   const navigation = useRootNavigationState();
@@ -23,6 +23,16 @@ function Navigator({ fontsPending }: { fontsPending: boolean }) {
       router.replace('/(auth)/reset-password');
     }
   }, [passwordRecovery, onRecoveryScreen, navigation?.key, router, loading]);
+
+  // Signed-out sessions (a revoked refresh token, a password changed elsewhere, a deep link opened
+  // while logged out) leave every app screen; only the welcome and auth screens stay reachable.
+  const first: string | undefined = segments[0];
+  const onPublicScreen = first === undefined || first === 'splash' || first === '(auth)';
+  useEffect(() => {
+    if (!loading && navigation?.key && passwordRecovery === 'idle' && !user && !onPublicScreen) {
+      router.replace('/splash');
+    }
+  }, [user, onPublicScreen, navigation?.key, router, loading, passwordRecovery]);
   return (
     <>
       <StatusBar style={isDark ? 'light' : 'dark'} />

@@ -1,5 +1,5 @@
 import { safeEqual } from './crypto.ts';
-import { db, requireUser } from './db.ts';
+import { db, requireUser, throttle } from './db.ts';
 import { env } from './env.ts';
 import { HttpError, json, text } from './http.ts';
 
@@ -109,6 +109,7 @@ export async function syncStoreBilling(uid: string): Promise<StoreBilling> {
 
 export async function syncAppStore(req: Request): Promise<Response> {
   const uid = await requireUser(req);
+  await throttle('store-sync', uid, 6); // each call reads RevenueCat with the project's key
   return json(await syncStoreBilling(uid));
 }
 

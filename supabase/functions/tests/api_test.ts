@@ -8,6 +8,7 @@ import { requireConfirmation } from '../api/account.ts';
 import { ERASED, eraseSelection } from '../api/comments.ts';
 import { summaryMessage } from '../api/cron.ts';
 import { HttpError } from '../api/http.ts';
+import { env, returnSchemes } from '../api/env.ts';
 import { safeEqual, seal, unseal, verifyHmacSha256 } from '../api/crypto.ts';
 import {
   authorizeUrl,
@@ -742,4 +743,44 @@ Deno.test('chooseAction: auto deletes AI-scored toxicity at 80%+ (never spam), h
   assertEquals(chooseAction({ remove: true, reason: 'harassment', confidence: 1, byRule: true }, 'auto'), 'hide');
   assertEquals(chooseAction(ai('harassment', 0.99), 'hide'), 'hide');
   assertEquals(chooseAction(ai('spam', 0.6), 'delete'), 'delete');
+});
+
+// ---------- security review, 22 September 2026 ----------
+
+Deno.test('a failed Instagram fetch never carries the token-bearing URL into the error', async () => {
+  const original = globalThis.fetch;
+  globalThis.fetch = () => Promise.reject(new TypeError('fetch failed', { cause: new Error('error sending request for url (https://graph.instagram.com/x?access_token=SECRETTOKEN)') }));
+  try {
+    const error = await assertRejects(() => deleteComment('c1', 'SECRETTOKEN'), InstagramError);
+    const printed = `${error.message} ${String((error as Error & { cause?: unknown }).cause ?? '')} ${error.stack ?? ''}`;
+    assert(!printed.includes('SECRETTOKEN'), printed);
+    assertEquals(error.status, 0);
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+Deno.test('a missing server setting is not named in the response', () => {
+  const previous = Deno.env.get('CRON_SECRET');
+  Deno.env.delete('CRON_SECRET');
+  try {
+    const error = assertThrows(() => env.cronSecret(), HttpError);
+    assertEquals(error.status, 503);
+    assert(!error.message.includes('CRON_SECRET'));
+  } finally {
+    if (previous !== undefined) Deno.env.set('CRON_SECRET', previous);
+  }
+});
+
+Deno.test('Expo Go return links are accepted only when ALLOW_EXPO_GO_RETURN is on', () => {
+  const previous = Deno.env.get('ALLOW_EXPO_GO_RETURN');
+  try {
+    Deno.env.delete('ALLOW_EXPO_GO_RETURN');
+    assertEquals(returnSchemes(), ['toxoff:']);
+    Deno.env.set('ALLOW_EXPO_GO_RETURN', 'true');
+    assertEquals(returnSchemes(), ['toxoff:', 'exp:']);
+  } finally {
+    if (previous === undefined) Deno.env.delete('ALLOW_EXPO_GO_RETURN');
+    else Deno.env.set('ALLOW_EXPO_GO_RETURN', previous);
+  }
 });

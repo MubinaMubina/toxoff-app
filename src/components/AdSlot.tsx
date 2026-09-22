@@ -19,7 +19,7 @@ import { useTheme } from '../theme/ThemeContext';
  * A banner ad for the Free plan (src/lib/ads.ts). Renders nothing for paying users, in Expo Go,
  * or when no ad filled, so screens need no second layout without it.
  */
-export function AdSlot({ placement }: { placement: Extract<AdPlacement, 'home_banner' | 'log_banner'> }) {
+export function AdSlot({ placement }: { placement: Extract<AdPlacement, 'home_banner'> }) {
   const { subscription } = useAuth();
   const { spacing } = useTheme();
   const [failed, setFailed] = useState(false);

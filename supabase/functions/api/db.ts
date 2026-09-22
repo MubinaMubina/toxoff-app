@@ -33,6 +33,13 @@ export async function requireUser(req: Request): Promise<string> {
   return data.user.id;
 }
 
+/** Per-user, per-minute limit for routes that call third-party APIs (take_call in the migrations). */
+export async function throttle(route: string, uid: string, perMinute: number): Promise<void> {
+  const { data, error } = await db().rpc('take_call', { p_scope: `${route}:${uid}`, per_minute: perMinute });
+  if (error) throw error;
+  if (!data) throw new HttpError(429, 'Too many requests. Please wait a minute and try again.');
+}
+
 export async function markNeedsReconnect(accountId: string): Promise<void> {
   const { error } = await db().from('accounts').update({ connected: false }).eq('id', accountId);
   if (error) throw error;

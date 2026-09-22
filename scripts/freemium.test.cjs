@@ -182,4 +182,72 @@ test('the Free plan against an isolated PostgreSQL database', { timeout: 120000 
     assert.equal(sql(`select public.apply_store_billing('${user(2)}', 'none', null, null, null, false);`), 't');
     assert.equal(sql(`select plan is null, sub_status, public.effective_plan('${user(2)}') from public.profiles where id = '${user(2)}';`), 't|none|free');
   });
+
+  await t.test('security review: claims come back, stale claims are retaken, limits and bounds hold', () => {
+    // A comment claimed while out of checks is not lost: the claim is released.
+    sql(`update public.profiles set free_comments_used = 50, bonus_comment_checks = 0,
+      free_period_start = public.free_period_start(created_at) where id = '${user(2)}';`);
+    assert.equal(sql(`select public.claim_comment('${user(2)}', 'instagram', 'late1');`), 'no_checks_left');
+    assert.equal(sql(`select count(*) from public.comment_claims where comment_id = 'late1';`), '0');
+    sql(`update public.profiles set bonus_comment_checks = 1 where id = '${user(2)}';`);
+    assert.equal(sql(`select public.claim_comment('${user(2)}', 'instagram', 'late1');`), 'claimed');
+    // A claim that never produced a log row can be retaken after 15 minutes, not before.
+    assert.equal(sql(`select public.claim_comment('${user(2)}', 'instagram', 'late1');`), 'duplicate');
+    sql(`update public.comment_claims set created_at = now() - interval '16 minutes' where comment_id = 'late1';`);
+    sql(`update public.profiles set sub_status = 'active', plan = 'plus' where id = '${user(2)}';`);
+    assert.equal(sql(`select public.claim_comment('${user(2)}', 'instagram', 'late1');`), 'claimed');
+    // ...but not once the comment was logged (it was handled).
+    sql(`insert into public.moderation_log (user_id, platform, username, text, reason, comment_id)
+      values ('${user(2)}', 'instagram', 'a', 'x', 'spam', 'late1');
+      update public.comment_claims set created_at = now() - interval '1 hour' where comment_id = 'late1';`);
+    assert.equal(sql(`select public.claim_comment('${user(2)}', 'instagram', 'late1');`), 'duplicate');
+    sql(`update public.profiles set sub_status = 'none', plan = null where id = '${user(2)}';`);
+
+    // Per-minute route limit: the app can't call it, the backend can, and it stops at the limit.
+    assert.equal(sql(`select has_function_privilege('authenticated', 'public.take_call(text, int)', 'EXECUTE');`), 'f');
+    assert.equal(sql(`select string_agg(public.take_call('t:${user(2)}', 2)::text, ',') from generate_series(1, 3);`), 'true,true,false');
+
+    // Bounds on what the app may store.
+    asUserRefused(user(1), `update public.profiles set full_name = repeat('a', 121) where id = '${user(1)}';`);
+    asUserRefused(user(1), `update public.filters set keywords = array_fill('k'::text, array[501]) where user_id = '${user(1)}';`);
+    asUser(user(1), `update public.filters set keywords = array_fill('k'::text, array[500]) where user_id = '${user(1)}';`);
+    assert.equal(sql(`select is_nullable from information_schema.columns where table_name = 'profiles' and column_name = 'created_at';`), 'NO');
+    assert.equal(sql(`select has_function_privilege('authenticated', 'public.free_period_start(timestamptz, timestamptz)', 'EXECUTE');`), 'f');
+  });
+
+  await t.test('the reviewer login: a sample account and comments that stay inside the 7-day log', () => {
+    // Only a profile marked as the reviewer login is seeded, and only by the backend.
+    refused(`select public.seed_reviewer_demo('${user(3)}');`);
+    assert.equal(sql(`select has_function_privilege('authenticated', 'public.seed_reviewer_demo(uuid)', 'EXECUTE'),
+      has_function_privilege('service_role', 'public.seed_reviewer_demo(uuid)', 'EXECUTE');`), 'f|t');
+    asUserRefused(user(3), `update public.profiles set reviewer = true where id = '${user(3)}';`);
+    asUserRefused(user(3), `update public.accounts set demo = true where user_id = '${user(3)}';`);
+
+    sql(`update public.profiles set reviewer = true where id = '${user(3)}';
+      select public.seed_reviewer_demo('${user(3)}');`);
+    assert.equal(sql(`select handle, demo, connected, paused, platform_user_id is null from public.accounts
+      where user_id = '${user(3)}';`), 'toxoff.demo|t|t|f|t');
+    assert.equal(sql(`select onboarded_at is not null, free_comments_used from public.profiles where id = '${user(3)}';`), 't|14');
+    // The sample account doesn't use up the Free plan's one real account.
+    sql(`insert into public.accounts (user_id, platform, handle) values ('${user(3)}', 'instagram', 'real');`);
+    refused(`insert into public.accounts (user_id, platform, handle) values ('${user(3)}', 'instagram', 'second');`);
+    sql(`delete from public.accounts where user_id = '${user(3)}' and handle = 'real';`);
+    // Everything seeded is visible on Free, and still will be just before tomorrow's refresh.
+    assert.equal(asUser(user(3), `select count(*), count(*) filter (where action = 'hidden'),
+      count(*) filter (where created_at > now() - interval '6 days') from public.moderation_log;`), '12|4|12');
+    // Each sample names its post, as real comments do, so the Log's "Posted on" row isn't blank.
+    assert.equal(sql(`select count(*) filter (where post_ref ~ '^(Reel|Post) · ') from public.moderation_log
+      where user_id = '${user(3)}';`), '12');
+
+    // A refresh undoes what the reviewer did, without doubling up or touching real comments.
+    sql(`update public.accounts set paused = true where user_id = '${user(3)}';
+      update public.moderation_log set restored = true where user_id = '${user(3)}';
+      insert into public.moderation_log (user_id, platform, username, text, reason, comment_id)
+        values ('${user(3)}', 'instagram', 'real', 'a real comment', 'spam', 'ig-1');
+      select public.seed_reviewer_demo('${user(3)}');`);
+    assert.equal(sql(`select count(*) from public.accounts where user_id = '${user(3)}';`), '1');
+    assert.equal(sql(`select paused from public.accounts where user_id = '${user(3)}';`), 'f');
+    assert.equal(sql(`select count(*), count(*) filter (where restored), count(*) filter (where comment_id = 'ig-1')
+      from public.moderation_log where user_id = '${user(3)}';`), '13|0|1');
+  });
 });

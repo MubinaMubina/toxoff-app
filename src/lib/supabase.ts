@@ -1,6 +1,12 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient } from '@supabase/supabase-js';
+import * as Crypto from 'expo-crypto';
 import 'react-native-url-polyfill/auto';
+import { installWebCrypto } from './webCrypto';
+
+// Without WebCrypto, supabase-js makes its PKCE verifier with Math.random and sends it in the clear
+// ("plain" challenge). Installed before the client is created, so sign-in uses SHA-256 (s256).
+installWebCrypto(globalThis, Crypto);
 
 const url = process.env.EXPO_PUBLIC_SUPABASE_URL;
 const anonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;

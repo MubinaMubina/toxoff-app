@@ -545,7 +545,8 @@ export function ModerationProvider({ children }: { children: React.ReactNode }) 
         .eq('id', id)
         .then(({ error }) => {
           if (!error) return;
-          apply(!paused);
+          // Revert only if this request's value is still what the switch shows.
+          setAccounts((prev) => prev.map((a) => (a.id === id && a.paused === paused ? { ...a, paused: !paused } : a)));
           Alert.alert('Could not update account', error.message);
         });
     },

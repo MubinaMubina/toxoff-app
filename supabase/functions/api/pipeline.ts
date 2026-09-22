@@ -124,19 +124,10 @@ export async function moderateInstagramComment(event: CommentEvent): Promise<Out
 
     // Hidden comments can be restored from the app; deleted ones are gone for good.
     const deleting = chooseAction(decision, filters.action) === 'delete';
-    try {
-      if (deleting) await deleteComment(event.commentId, token.access_token);
-      else await setCommentHidden(event.commentId, true, token.access_token);
-    } catch (e) {
-      if (e instanceof InstagramError && e.gone) return 'comment_gone';
-      if (e instanceof InstagramError && e.tokenInvalid) {
-        await markNeedsReconnect(target.account_id);
-        await release(); // it wasn't moderated, so it doesn't use up a free check
-        return 'needs_reconnect';
-      }
-      throw e;
-    }
 
+    // The log row is written first, so a permanent deletion can never happen without a record of
+    // it (a delete followed by a failed write would be retried as "comment gone" and never logged).
+    // If the platform action then fails, the row is taken back.
     const { data: logged, error: logError } = await db()
       .from('moderation_log')
       .upsert(
@@ -158,6 +149,23 @@ export async function moderateInstagramComment(event: CommentEvent): Promise<Out
       .select('id')
       .maybeSingle();
     if (logError) throw logError;
+    const unlog = async () => {
+      if (logged) await db().from('moderation_log').delete().eq('id', logged.id);
+    };
+
+    try {
+      if (deleting) await deleteComment(event.commentId, token.access_token);
+      else await setCommentHidden(event.commentId, true, token.access_token);
+    } catch (e) {
+      await unlog();
+      if (e instanceof InstagramError && e.gone) return 'comment_gone';
+      if (e instanceof InstagramError && e.tokenInvalid) {
+        await markNeedsReconnect(target.account_id);
+        await release(); // it wasn't moderated, so it doesn't use up a free check
+        return 'needs_reconnect';
+      }
+      throw e;
+    }
 
     // One push per comment; 'daily' users get a summary instead (cron.ts), 'none' nothing.
     if (logged && profile?.notifications_enabled && profile.notification_mode === 'each' && profile.push_token) {

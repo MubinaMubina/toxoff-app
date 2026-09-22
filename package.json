@@ -9,7 +9,7 @@
     "web": "expo start --web",
     "lint": "expo lint",
     "typecheck": "tsc --noEmit",
-    "test:ui": "node --test scripts/password-recovery.test.cjs scripts/oauth-callback.test.cjs scripts/auth-recovery.test.cjs scripts/protection.test.cjs scripts/theme-contrast.test.cjs",
+    "test:ui": "node --test scripts/web-crypto.test.cjs scripts/password-recovery.test.cjs scripts/oauth-callback.test.cjs scripts/auth-recovery.test.cjs scripts/protection.test.cjs scripts/theme-contrast.test.cjs",
     "test:functions": "deno test --allow-env --config supabase/functions/api/deno.json supabase/functions/tests",
     "test:security": "deno test --allow-env --config supabase/functions/api/deno.json supabase/functions/tests/security_store_test.ts && node --test scripts/security-invites.test.cjs",
     "test:db": "node --test scripts/security-invites.test.cjs scripts/freemium.test.cjs",
