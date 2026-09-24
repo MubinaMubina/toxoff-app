@@ -115,9 +115,12 @@ export default function Dashboard() {
           <Text accessibilityRole="header" style={{ color: colors.text, fontSize: summary.kind === 'active' ? 32 : font.size.xxl, fontWeight: font.weight.semibold, letterSpacing: -1.3, marginTop: 14 }}>
             {summary.kind === 'active' ? <>Your peace.{'\n'}<Text style={{ fontWeight: font.weight.heavy }}>Protected.</Text></> : summary.title}
           </Text>
-          <Text style={{ color: colors.textMuted, fontSize: font.size.md, lineHeight: 24, marginTop: 10 }}>{summary.description}</Text>
-          {loading ? <Skeleton height={12} width="60%" style={{ marginTop: 14 }} /> : lastSyncedAt && (
-            <Text style={{ color: colors.textMuted, fontSize: font.size.sm, marginTop: 12 }}>Status updated {timeAgo(lastSyncedAt)}</Text>
+          {/* All is well: the headline says it. Other states explain what's wrong and what to do. */}
+          {summary.kind !== 'active' && (
+            <Text style={{ color: colors.textMuted, fontSize: font.size.md, lineHeight: 24, marginTop: 10 }}>{summary.description}</Text>
+          )}
+          {status === 'offline' && lastSyncedAt && (
+            <Text style={{ color: colors.textMuted, fontSize: font.size.sm, marginTop: 12 }}>Last updated {timeAgo(lastSyncedAt)}</Text>
           )}
           {action && <Button label={actionLabel} onPress={handleAction} size="md" style={{ marginTop: 16 }} />}
           {summary.kind === 'quota' && (
