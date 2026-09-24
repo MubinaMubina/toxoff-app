@@ -27,7 +27,8 @@ const ThemeContext = createContext<ThemeValue | undefined>(undefined);
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const system = useSystemScheme();
-  const [pref, setPrefState] = useState<ThemePref>('light');
+  // Follows the phone's light or dark setting until the user picks one in Settings.
+  const [pref, setPrefState] = useState<ThemePref>('system');
 
   useEffect(() => {
     AsyncStorage.getItem(STORAGE_KEY).then((v) => {

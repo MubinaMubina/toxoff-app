@@ -580,8 +580,8 @@ The app's colours
 (`src/theme/colors.ts`) now match the live toxoff.app: warm paper `#FAFBF7`, sage `#EDF5E9`, forest
 `#173F35` and lavender `#E4DDF5`. Bundled Manrope runs through `src/components/AppText.tsx`; see
 [`assets/fonts/README.md`](assets/fonts/README.md) for font sources and licensing. Native layouts
-keep 20pt gutters, 8pt button corners and 14pt card corners. New installs default to light mode;
-saved theme choices are retained, with the same palette adapted for dark mode.
+keep 20pt gutters, 8pt button corners and 14pt card corners. New installs follow the phone's light or
+dark setting (Settings → Appearance → System); a saved Light or Dark choice is kept.
 
 ### Reviewer login and listing text
 
