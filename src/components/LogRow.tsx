@@ -58,8 +58,20 @@ export function LogRow({
           ? `${deleted ? 'Deleted' : 'Hidden'} comment from ${blurUsername(comment.username)}. ${comment.reason.replace(/_/g, ' ')}. ${timeAgo(comment.createdAt)}`
           : undefined}
         accessibilityHint={open ? 'Collapse comment details.' : 'Expand comment details.'}
-        style={{ minHeight: 44 }}
+        style={{ minHeight: 44, justifyContent: 'center' }}
       >
+      {concealed ? (
+        // The words are out of sight, so the row is one line: why, who (masked) and when.
+        <View style={{ flexDirection: 'row', gap: 12, alignItems: 'center', minHeight: 30 }}>
+          <PlatformIcon platform={comment.platform} size={14} withBackground />
+          <ReasonBadge reason={comment.reason} />
+          {/* Right-aligned so it keeps one edge whatever the badge's width. */}
+          <Text numberOfLines={1} style={{ flex: 1, color: colors.textMuted, fontSize: font.size.sm, textAlign: 'right' }}>
+            {blurUsername(comment.username)} · {timeAgo(comment.createdAt)}
+          </Text>
+          <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={16} color={colors.textFaint} />
+        </View>
+      ) : (
       <View style={{ flexDirection: 'row', gap: 12, alignItems: 'flex-start' }}>
         <View style={{ paddingTop: 2 }}>
           <PlatformIcon platform={comment.platform} size={14} withBackground />
@@ -73,21 +85,12 @@ export function LogRow({
               {timeAgo(comment.createdAt)}
             </Text>
           </View>
-          {concealed ? (
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8, padding: 10, backgroundColor: colors.filtered, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.filteredBorder, borderRadius: 6 }}>
-              <Ionicons name="eye-off-outline" size={16} color={colors.neutral} />
-              <Text style={{ color: colors.text, fontSize: font.size.md, flex: 1 }}>
-                {deleted ? 'Deleted' : 'Hidden'} for you · not shown
-              </Text>
-            </View>
-          ) : (
-            <Text
-              numberOfLines={open ? undefined : 1}
-              style={{ color: colors.text, fontSize: font.size.md, marginTop: 4, lineHeight: 20 }}
-            >
-              {comment.text}
-            </Text>
-          )}
+          <Text
+            numberOfLines={open ? undefined : 1}
+            style={{ color: colors.text, fontSize: font.size.md, marginTop: 4, lineHeight: 20 }}
+          >
+            {comment.text}
+          </Text>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8, marginTop: 8 }}>
             <ReasonBadge reason={comment.reason} />
             <Ionicons
@@ -99,16 +102,19 @@ export function LogRow({
           </View>
         </View>
       </View>
+      )}
       </Pressable>
 
-      {/* Always on the row, so reading a concealed comment is one deliberate tap away. */}
+      {/* Its own button (not inside the expand one), so VoiceOver reaches it; one deliberate tap away. */}
       {concealed && (
         <Pressable
           onPress={() => { Haptics.selectionAsync().catch(() => {}); setRevealed(true); }}
           accessibilityRole="button"
           accessibilityLabel="Read this comment anyway"
-          // Lines up with the text column above: the platform tile (14pt icon × 1.9) plus the row's 12pt gap.
-          style={{ alignSelf: 'flex-start', minHeight: 44, justifyContent: 'center', paddingRight: 12, marginTop: 2, marginLeft: Math.round(14 * 1.9) + 12 }}
+          // hitSlop keeps a 44pt target without padding the card. Lines up with the badge: the
+          // platform tile (14pt icon × 1.9) plus the row's 12pt gap.
+          hitSlop={{ top: 10, bottom: 10, left: 8, right: 16 }}
+          style={{ alignSelf: 'flex-start', paddingVertical: 2, marginLeft: Math.round(14 * 1.9) + 12 }}
         >
           <Text style={{ color: colors.textMuted, fontSize: font.size.sm, textDecorationLine: 'underline' }}>Read it anyway</Text>
         </Pressable>
