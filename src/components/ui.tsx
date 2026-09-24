@@ -1,7 +1,18 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import React from 'react';
-import { ActivityIndicator, Pressable, StyleProp, StyleSheet, TextStyle, View, ViewStyle } from 'react-native';
+import {
+  ActivityIndicator,
+  Platform,
+  Pressable,
+  StyleProp,
+  StyleSheet,
+  Switch,
+  SwitchProps,
+  TextStyle,
+  View,
+  ViewStyle,
+} from 'react-native';
 import { Text } from './AppText';
 import { useTheme } from '../theme/ThemeContext';
 import { BadgeTone, getSemanticColors, SemanticTone } from '../theme/colors';
@@ -122,6 +133,26 @@ export function Card({
     >
       {children}
     </View>
+  );
+}
+
+/* ---------------- Toggle ---------------- */
+
+// React Native lays every iOS switch out at the old 51 × 31 size and paints ios_backgroundColor as
+// a 51 × 31 rounded box behind it. Built with the iOS 26 SDK the switch is 63 × 28, so that box
+// showed as a dark lip under the track and the switch overhung its row's right margin. The box
+// is sized to the real switch, and the off track and thumb are left to iOS.
+const IOS_26_SWITCH = Platform.OS === 'ios' && parseInt(String(Platform.Version), 10) >= 26;
+
+export function Toggle({ style, ...props }: Omit<SwitchProps, 'trackColor' | 'thumbColor' | 'ios_backgroundColor'>) {
+  const { colors } = useTheme();
+  return (
+    <Switch
+      {...props}
+      trackColor={{ false: Platform.OS === 'ios' ? undefined : colors.switchOff, true: colors.switchOn }}
+      thumbColor={Platform.OS === 'ios' ? undefined : colors.switchThumb}
+      style={[IOS_26_SWITCH && { width: 63, height: 28 }, style]}
+    />
   );
 }
 

@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
-import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, Switch, TextInput, View } from 'react-native';
+import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, TextInput, View } from 'react-native';
 import { Text, useBodyFontFamily } from '../../src/components/AppText';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
@@ -13,6 +13,7 @@ import {
   ScreenTitle,
   SectionLabel,
   Segmented,
+  Toggle,
 } from '../../src/components/ui';
 import { useAuth } from '../../src/context/AuthContext';
 import { useModeration } from '../../src/context/ModerationContext';
@@ -204,7 +205,7 @@ export default function Filters() {
                         {c.desc}
                       </Text>
                     </View>
-                    <Switch
+                    <Toggle
                       accessibilityLabel={`${c.label} protection`}
                       accessibilityHint={c.desc}
                       value={filters.categories[c.key]}
@@ -212,9 +213,6 @@ export default function Filters() {
                         Haptics.selectionAsync().catch(() => {});
                         toggleCategory(c.key);
                       }}
-                      trackColor={{ false: colors.switchOff, true: colors.switchOn }}
-                      ios_backgroundColor={colors.switchOff}
-                      thumbColor={colors.switchThumb}
                     />
                   </View>
                 </React.Fragment>

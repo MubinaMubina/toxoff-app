@@ -2,11 +2,11 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import React, { useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, ScrollView, Switch, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, ScrollView, View } from 'react-native';
 import { Text } from '../src/components/AppText';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { PlatformIcon } from '../src/components/PlatformIcon';
-import { Button, Card, H1, HeaderButton, Muted, RowSeparator } from '../src/components/ui';
+import { Button, Card, H1, HeaderButton, Muted, RowSeparator, Toggle } from '../src/components/ui';
 import { useAuth } from '../src/context/AuthContext';
 import { useModeration } from '../src/context/ModerationContext';
 import { DEFAULT_FLAGGED_ACTION, DEFAULT_SENSITIVITY } from '../src/data/moderationDefaults';
@@ -182,7 +182,7 @@ export default function Onboarding() {
                     <Text style={{ color: colors.text, fontSize: font.size.lg, fontWeight: font.weight.medium }}>Include spam protection</Text>
                     <Text style={{ color: colors.textMuted, fontSize: font.size.md, marginTop: 4 }}>Catch scams, bots and unwanted promotions.</Text>
                   </View>
-                  <Switch accessibilityLabel="Include spam protection" value={spamEnabled} disabled={busy} onValueChange={setSpamProtection} trackColor={{ false: colors.switchOff, true: colors.switchOn }} ios_backgroundColor={colors.switchOff} thumbColor={colors.switchThumb} />
+                  <Toggle accessibilityLabel="Include spam protection" value={spamEnabled} disabled={busy} onValueChange={setSpamProtection} />
                 </View>
                 <View style={{ backgroundColor: action === 'hide' ? colors.infoSoft : colors.warningSoft, borderWidth: 1, borderColor: action === 'hide' ? colors.infoBorder : colors.warningBorder, borderRadius: radius.md, padding: 16 }}>
                   <Text style={{ color: action === 'hide' ? colors.info : colors.warning, fontSize: font.size.md, lineHeight: 23 }}>

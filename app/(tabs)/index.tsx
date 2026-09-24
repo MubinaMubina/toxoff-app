@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
-import { Alert, Pressable, RefreshControl, ScrollView, Switch, View } from 'react-native';
+import { Alert, Pressable, RefreshControl, ScrollView, View } from 'react-native';
 import { Text } from '../../src/components/AppText';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AdSlot } from '../../src/components/AdSlot';
@@ -10,7 +10,7 @@ import { PlatformIcon } from '../../src/components/PlatformIcon';
 import { LogoMark, Wordmark } from '../../src/components/Logo';
 import { RemovedCommentRow } from '../../src/components/RemovedCommentRow';
 import { Skeleton, SkeletonRows } from '../../src/components/Skeleton';
-import { Badge, Button, Card, LIST_ROW, RowIcon, RowSeparator, SectionLabel, Segmented } from '../../src/components/ui';
+import { Badge, Button, Card, LIST_ROW, RowIcon, RowSeparator, SectionLabel, Segmented, Toggle } from '../../src/components/ui';
 import { useAuth } from '../../src/context/AuthContext';
 import { useModeration } from '../../src/context/ModerationContext';
 import { AD_REWARD_CHECKS, AD_REWARDS_PER_DAY, ADS_ENABLED, getPlan } from '../../src/data/plans';
@@ -185,15 +185,12 @@ export default function Dashboard() {
                         </View>
                       </View>
                       {account.connected && !unsupported && !overLimit && !outOfFreeChecks ? (
-                        <Switch
+                        <Toggle
                           accessibilityLabel={`Moderation for ${account.handle}`}
                           accessibilityHint="Pause or resume checking new comments."
                           value={!account.paused}
                           disabled={status !== 'ready'}
                           onValueChange={() => { Haptics.selectionAsync().catch(() => {}); togglePause(account.id); }}
-                          trackColor={{ false: colors.switchOff, true: colors.switchOn }}
-                          thumbColor={colors.switchThumb}
-                          ios_backgroundColor={colors.switchOff}
                         />
                       ) : (
                         <Pressable accessibilityRole="button" accessibilityLabel={`Manage ${account.handle}`} onPress={() => router.push('/connect-accounts')} style={{ minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' }}>
