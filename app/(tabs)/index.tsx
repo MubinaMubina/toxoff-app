@@ -223,7 +223,6 @@ export default function Dashboard() {
 
         <View style={{ marginTop: spacing.sm }}>
           <SectionLabel action={{ label: 'Open log', onPress: () => router.push('/(tabs)/log') }}>Recent activity</SectionLabel>
-          <Text style={{ color: colors.textMuted, fontSize: font.size.sm, lineHeight: 20, marginBottom: 12 }}>The words stay out of sight here. Review a comment only when you choose.</Text>
           {loading ? <SkeletonRows count={2} /> : feed.length === 0 ? (
             <View style={{ borderTopWidth: 0.5, borderColor: colors.border, paddingVertical: 20 }}>
               <Text style={{ color: colors.text, fontSize: font.size.md, fontWeight: font.weight.semibold }}>{activityUnavailable ? 'Activity unavailable' : 'No recent activity'}</Text>
@@ -232,11 +231,14 @@ export default function Dashboard() {
               </Text>
             </View>
           ) : (
-            <View style={{ gap: 10 }}>
-              {feed.map((comment) => (
-                <RemovedCommentRow key={comment.id} comment={comment} concealed />
+            <Card padded={false}>
+              {feed.map((comment, index) => (
+                <React.Fragment key={comment.id}>
+                  {index > 0 && <RowSeparator />}
+                  <RemovedCommentRow comment={comment} concealed />
+                </React.Fragment>
               ))}
-            </View>
+            </Card>
           )}
         </View>
 

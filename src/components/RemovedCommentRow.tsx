@@ -1,51 +1,42 @@
+import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
 import { View } from 'react-native';
 import { Text } from './AppText';
 import { useTheme } from '../theme/ThemeContext';
+import { getSemanticColors } from '../theme/colors';
 import { timeAgo } from '../lib/time';
 import { RemovedComment } from '../types';
-import { LIST_ROW, ReasonBadge } from './ui';
+import { LIST_ROW, reasonLabel, reasonTone, RowIcon } from './ui';
 
-/** Compact single-line preview used in the dashboard live feed. */
+/**
+ * One line of the dashboard feed, for use inside a list Card. Concealed rows name the reason,
+ * never the words: the Log has the comment if the user wants it.
+ */
 export function RemovedCommentRow({ comment, concealed }: { comment: RemovedComment; concealed: boolean }) {
   const { colors, font } = useTheme();
+  const tone = getSemanticColors(colors, reasonTone(comment.reason));
+  const action = comment.action === 'deleted' ? 'Deleted' : 'Hidden';
+  const detail = [concealed ? action : reasonLabel(comment.reason), comment.language].filter(Boolean).join(' · ');
   return (
     <View
-      style={{
-        flexDirection: 'row',
-        gap: LIST_ROW.gap,
-        paddingVertical: 12,
-        paddingHorizontal: LIST_ROW.inset,
-        alignItems: 'flex-start',
-        backgroundColor: colors.filtered,
-        borderWidth: 1,
-        borderStyle: 'dashed',
-        borderColor: colors.filteredBorder,
-        borderRadius: 6,
-      }}
+      accessible
+      accessibilityLabel={`${action}: ${reasonLabel(comment.reason)}${comment.language ? `, ${comment.language}` : ''}, ${timeAgo(comment.createdAt)}`}
+      style={{ flexDirection: 'row', alignItems: 'center', gap: LIST_ROW.gap, paddingHorizontal: LIST_ROW.inset, paddingVertical: 12 }}
     >
-      <Ionicons name={comment.action === 'deleted' ? 'trash-outline' : 'eye-off-outline'} size={19} color={colors.neutral} style={{ marginTop: 2 }} />
-      <View style={{ flex: 1 }}>
-        {concealed ? (
-          // Removed for the user: they don't need to read it. The Log has it if they want to.
-          <Text
-            style={{ color: colors.text, fontSize: font.size.md, lineHeight: 22, fontWeight: font.weight.medium }}
-          >
-            {comment.action === 'deleted' ? 'Comment deleted' : 'Comment hidden'}
-          </Text>
-        ) : (
-          <Text numberOfLines={2} style={{ color: colors.text, fontSize: font.size.md, lineHeight: 20 }}>
-            {comment.text}
-          </Text>
-        )}
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8, marginTop: 8 }}>
-          <ReasonBadge reason={comment.reason} />
-          <Text style={{ color: colors.textMuted, fontSize: font.size.sm, flexShrink: 1 }}>
-            {[comment.language, timeAgo(comment.createdAt)].filter(Boolean).join(' · ')}
-          </Text>
+      <RowIcon>
+        <View style={{ width: 32, height: 32, borderRadius: 9, backgroundColor: tone.background, alignItems: 'center', justifyContent: 'center' }}>
+          <Ionicons name={comment.action === 'deleted' ? 'trash-outline' : 'eye-off-outline'} size={16} color={tone.text} />
         </View>
+      </RowIcon>
+      <View style={{ flex: 1 }}>
+        <Text numberOfLines={1} style={{ color: colors.text, fontSize: font.size.md, fontWeight: font.weight.semibold }}>
+          {concealed ? reasonLabel(comment.reason) : comment.text}
+        </Text>
+        <Text numberOfLines={1} style={{ color: colors.textMuted, fontSize: font.size.sm, marginTop: 2 }}>
+          {detail}
+        </Text>
       </View>
+      <Text style={{ color: colors.textFaint, fontSize: font.size.sm }}>{timeAgo(comment.createdAt)}</Text>
     </View>
   );
 }
-import { Ionicons } from '@expo/vector-icons';

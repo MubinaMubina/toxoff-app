@@ -272,8 +272,11 @@ const REASON_TEXT: Record<string, string> = {
   toxicity: 'Toxicity',
 };
 
+export const reasonLabel = (reason: string) => REASON_TEXT[reason] ?? reason;
+export const reasonTone = (reason: string): SemanticTone => REASON_TONE[reason] ?? 'neutral';
+
 export function ReasonBadge({ reason }: { reason: string }) {
-  return <Badge label={REASON_TEXT[reason] ?? reason} tone={REASON_TONE[reason] ?? 'neutral'} />;
+  return <Badge label={reasonLabel(reason)} tone={reasonTone(reason)} />;
 }
 
 /* ---------------- Text helpers ---------------- */
