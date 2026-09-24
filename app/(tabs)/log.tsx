@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import React, { useMemo, useState } from 'react';
-import { Alert, FlatList, LayoutAnimation, Pressable, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, LayoutAnimation, Pressable, View } from 'react-native';
 import { Text } from '../../src/components/AppText';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { FilterChip } from '../../src/components/FilterChip';
@@ -261,31 +261,29 @@ export default function Log() {
               </View>
             )}
             {filterPanel}
+            {/* One line: the reassurance, and the way out. The confirmation explains the rest. */}
             {section === 'deleted' && deletedCount > 0 && (
-            <Card style={{ marginBottom: 4 }}>
-              <View style={{ flexDirection: 'row', gap: 12, alignItems: 'flex-start' }}>
-                <Ionicons name="heart-outline" size={22} color={colors.primary} style={{ marginTop: 1 }} />
-                <View style={{ flex: 1 }}>
-                  <Text style={{ color: colors.text, fontSize: font.size.md, fontWeight: font.weight.semibold }}>
-                    You don’t need to read these
-                  </Text>
-                  <Text style={{ color: colors.textMuted, fontSize: font.size.sm, marginTop: 4, lineHeight: 19 }}>
-                    toxoff already deleted them from your account. Their words are kept out of sight here.
-                    Erase them from your log for good, unread, and move on.
-                  </Text>
-                </View>
-              </View>
-              <View style={{ marginTop: 14 }}>
-                <Button
-                  label="Erase all deleted comments forever"
-                  variant="danger"
-                  size="md"
-                  icon="flame-outline"
-                  loading={erasing}
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Ionicons name="heart-outline" size={18} color={colors.primary} accessible={false} />
+                <Text style={{ flex: 1, color: colors.textMuted, fontSize: font.size.sm }}>No need to read these.</Text>
+                <Pressable
                   onPress={() => confirmErase()}
-                />
+                  disabled={erasing}
+                  accessibilityRole="button"
+                  accessibilityLabel="Erase all deleted comments forever"
+                  accessibilityState={{ disabled: erasing, busy: erasing }}
+                  style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 5, minHeight: 44, paddingLeft: 12, opacity: pressed ? 0.6 : 1 })}
+                >
+                  {erasing ? (
+                    <ActivityIndicator size="small" color={colors.danger} />
+                  ) : (
+                    <>
+                      <Ionicons name="flame-outline" size={16} color={colors.danger} accessible={false} />
+                      <Text style={{ color: colors.danger, fontSize: font.size.sm, fontWeight: font.weight.semibold }}>Erase all</Text>
+                    </>
+                  )}
+                </Pressable>
               </View>
-            </Card>
             )}
           </>
         }
