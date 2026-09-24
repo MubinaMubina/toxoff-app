@@ -1,6 +1,6 @@
 #!/bin/sh
 # Production iOS build (and, with "submit", upload to TestFlight) using the team's App Store Connect
-# key, so no Apple ID login is needed. Run in your own Terminal:
+# API key, so no Apple ID login is needed. Run in your own Terminal:
 #   sh ~/toxoff/scripts/build-ios.sh            # build
 #   sh ~/toxoff/scripts/build-ios.sh submit     # send the latest build to TestFlight
 #   sh ~/toxoff/scripts/build-ios.sh credentials  # manage signing / upload the push key

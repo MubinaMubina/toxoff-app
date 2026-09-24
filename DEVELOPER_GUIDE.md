@@ -1,0 +1,620 @@
+# toxoff: developer guide
+
+The full technical reference: setup, configuration, the backend, billing and operations. For what
+toxoff is and how to try it, start with the [README](README.md).
+
+toxoff is a mobile app that connects to a creator's Instagram accounts
+and uses AI to automatically detect and remove toxic, hateful, or harmful comments in
+any language. Creators sign up with email, Google, or Apple and start on a free plan (50
+comment checks a month, more for inviting a friend), and subscribe in the app
+(Apple in-app purchase) for unlimited moderation. Ads for the free plan are built but switched off
+in version 1 (see [Ads](#ads-admob-reported-to-revenuecat-ads)). TikTok is coming soon and cannot
+currently be connected.
+
+Built with **Expo (React Native) + TypeScript**, **Supabase** (auth + database),
+**RevenueCat** (App Store subscriptions), and **Expo Notifications** (push alerts).
+Launches on **iOS (App Store)**; the codebase can also build for Android later.
+
+---
+
+## Quick start
+
+```bash
+npm install
+npm run gen:assets        # export platform sizes from the approved icon and mascot (optional)
+cp .env.example .env      # fill in keys — or leave blank to run in DEMO MODE
+npx expo start            # press i (iOS), a (Android), or scan in Expo Go
+```
+
+### Demo mode
+With **no `.env` keys**, the app runs fully on **mock data** — no network calls. You can
+walk the entire flow (signup → onboarding → dashboard → log → filters →
+paywall → settings) immediately. Auth, the moderation feed, and checkout are all
+simulated. Password reset email is unavailable in demo mode. Drop in real keys to go live.
+
+---
+
+## Project structure
+
+```
+app/                       # expo-router screens (file-based routing)
+  _layout.tsx              # providers + root stack
+  index.tsx                # auth/recovery redirect (→ splash, onboarding, reset password or tabs)
+  splash.tsx               # onboarding / splash
+  (auth)/                  # login, signup, forgot/reset password
+  onboarding.tsx           # Connect → Protection → Ready
+  connect-accounts.tsx     # Instagram OAuth + account-limit gating; TikTok coming soon
+  paywall.tsx              # subscription screen (App Store prices, restore purchases)
+  invite.tsx               # invite friends: share a code, or enter a friend's
+  (tabs)/                  # Home, Log, Filters, Settings (bottom tabs)
+src/
+  theme/                   # colors + light/dark ThemeContext
+  context/                 # Auth, Moderation providers
+  data/                    # plans, list prices, mock data
+  lib/                     # supabase, api, purchases (RevenueCat), invites, notifications, time
+  components/              # Button, Card, Badge, LogRow, etc.
+supabase/config.toml       # Supabase CLI config (auth settings, redirect URLs)
+supabase/migrations/       # database schema: tables, RLS, triggers, plan limits, cron jobs
+supabase/functions/api/    # backend: Instagram connect, comment webhooks, AI check, restores
+supabase/functions/tests/  # backend unit tests (Deno)
+scripts/generate-assets.cjs # platform exports from the original icon and transparent mascot
+```
+
+---
+
+## Configuration
+
+All client env vars are prefixed `EXPO_PUBLIC_` (see `.env.example`). **Secret keys
+(RevenueCat secret, OpenAI) never go in the app** — they live on your backend.
+
+### Supabase (auth + data)
+The hosted project is **toxoff** (ref `sjfmcieunormozrybqmi`, Singapore) and this repo is
+linked to it with the Supabase CLI. The database password is in the macOS Keychain under
+`supabase-toxoff-db`.
+
+- **Schema changes:** add a new file in `supabase/migrations/`, then
+  `npx supabase db push -p "$(security find-generic-password -s supabase-toxoff-db -w)"`.
+- **Auth settings** live in `supabase/config.toml` (site URL `toxoff://`, redirect URLs,
+  email confirmation, Apple). Always run `npx supabase config diff` before
+  `npx supabase config push` — undeclared settings are left alone, declared ones overwrite
+  the hosted project.
+- **App keys:** `.env` holds the project URL and anon key (public). The service-role key
+  never goes in the app.
+- **Auth emails** go out from `toxoff <noreply@toxoff.app>` through Resend (`[auth.email.smtp]`,
+  templates in `supabase/templates/`). The domain is verified in Resend with DNS records at
+  Namecheap; the sending-only API key is in the Keychain (`supabase-toxoff-resend-api-key`).
+  Any `config push` must have both `RESEND_API_KEY` and `SUPABASE_AUTH_EXTERNAL_GOOGLE_SECRET`
+  in the environment (the comment above `[auth.email.smtp]` has the full command), or the push
+  fails or blanks a secret.
+- **Email confirmation is off** for development. Before launch set
+  `[auth.email] enable_confirmations = true` and push.
+- **Google sign-in:** set up. Web OAuth client in Google Cloud project *toxoff*, configured under
+  `[auth.external.google]`. The secret isn't in git: it's in the Keychain (`supabase-toxoff-google-secret`),
+  so push config with it in the environment, or the push would clear it:
+  `SUPABASE_AUTH_EXTERNAL_GOOGLE_SECRET="$(security find-generic-password -s supabase-toxoff-google-secret -w)" npx supabase config push`
+- **Sign in with Apple** (iOS only — required by App Store rule 4.8 because Google sign-in
+  is offered) is enabled for `com.toxoff.app` and `host.exp.Exponent` (Expo Go). `app.json`
+  sets `ios.usesAppleSignIn`, so EAS adds the capability to the App ID at build time.
+- Upgrade the project to **Pro** before launch — free projects pause after a week idle.
+
+### AI moderation
+Comments are checked by the backend, not the app. `supabase/functions/api/classifier.ts` asks a
+small GPT model (`OPENAI_MODEL`, default `gpt-5.4-nano`, about $0.05 per 1,000 comments, needs an
+`OPENAI_API_KEY`) to score each comment in any language, including Roman Urdu, Hindi and mixed
+scripts, and to name its language (saved as `moderation_log.language`). If the model fails, OpenAI's
+free moderation endpoint (English-centric) is the fallback. A spam score from simple signals (links,
+"DM me", phone numbers) is added either way.
+
+Cheap answers come first, so the model only sees the comments that need it (`classify()`):
+comments with nothing to read (emoji, @mentions, numbers) and obvious spam (two or more signals)
+are settled by rules with no API call at all. Plain English comments, where every word is a common
+one, go to the free moderation endpoint, and if it's confidently clean (every score under 10%) or
+confidently abusive (90% or more) that's the answer. Everything else goes to the model: other
+languages and scripts, any unknown word (names, slang, Roman Urdu), and the grey zone in between.
+`Classification.source` says which path answered.
+`moderation.ts` turns the scores into a decision with the user's sensitivity, categories, keyword
+blocklist and blocked users (keywords match whole words). The spam category is **off by default**
+(`filters.categories`); users turn it on during onboarding or in Filters. To move to another model or provider
+(e.g. `gpt-5.4-mini` for sharper judgement, or Claude), change `OPENAI_MODEL` or replace
+`classify()`; the rest only sees scores.
+
+The classifier does one thing: it scores a comment's text, and the only action taken on the result
+is removing that one comment. `filters.flagged_action` (Filters screen) decides how: **delete**, the
+default for new accounts since 19 September 2026, permanently deletes every flagged comment,
+including spam; **auto** (shown as "Delete clear abuse") permanently deletes toxicity scored at 80%
+or more and hides everything else, including spam; **hide** hides every flagged comment so it can
+be restored (`chooseAction()` in `moderation.ts`). New accounts also start on **High**
+sensitivity. Both defaults live in `src/data/moderationDefaults.ts`, the column defaults on
+`public.filters` (migration `20260919100000_strict_defaults.sql`) and the fallbacks in
+`loadFilters()` (`pipeline.ts`); keep the three in step. Selecting either deletion mode requires confirmation in
+Filters. Existing saved modes are preserved. Blocked users and keywords are rules, not AI scores,
+so auto hides those. The log records which happened (`moderation_log.action`),
+and Restore is refused for deleted ones. The app's Log has two sections: **Hidden** (readable,
+restorable) and **Deleted**, where the words stay out of sight (a "Read it anyway" link shows
+them) and the user is invited to **erase them forever, unread**, one or all at once.
+`POST /comments/erase-deleted` wipes the text and author from those rows for good but keeps the
+rows (`moderation_log.erased_at`), so Home's counts and the reason stats stay right; the app doesn't
+show erased rows. Nothing else is ever done:
+no replies, likes or anything outside comments. It's also **rate limited**:
+each paid model call takes a slot from `take_classifier_call()`, by default 60 a minute per user
+and 600 a minute for the whole app (comments settled by rules or the free endpoint don't take one). You can change these with the optional `CLASSIFIER_LIMIT_PER_USER` and
+`CLASSIFIER_LIMIT_TOTAL` secrets. Over the limit, a comment isn't skipped: its free check is given
+back and it's checked on Meta's next delivery or the next poll.
+
+### Instagram / TikTok
+Instagram uses the Instagram API with Instagram Login (Business and Creator accounts). Connect
+opens Instagram's consent screen through the backend, which keeps the token server-side
+(`account_tokens`) and subscribes the account to comment webhooks. The app explains that toxoff
+can read, hide and restore comments, and permanently delete them if deletion is enabled. It does
+not publish posts or access DMs. TikTok is shown as "Coming soon" with no connection action;
+current plan limits apply to Instagram accounts.
+
+---
+
+## Moderation backend
+
+One Supabase Edge Function, `supabase/functions/api`, deployed at
+`https://sjfmcieunormozrybqmi.supabase.co/functions/v1/api` (the app's `EXPO_PUBLIC_API_BASE_URL`).
+
+| Route | Called by | Does |
+|-------|-----------|------|
+| `POST /connect/start` | app | returns Instagram's consent URL |
+| `GET /connect/instagram/callback` | Instagram | swaps the code for a 60-day token; hands it back to the app sealed |
+| `POST /connect/finish` | app | links the account to the signed-in user (plan limit applies) |
+| `POST /comments/restore` | app | un-hides the comment on Instagram, marks the log row restored |
+| `POST /account/delete` | app | Settings → "Delete my account": deletes the auth user (cascades to every table) and the RevenueCat subscriber; body must be `{ "confirm": true }` |
+| `GET`/`POST /webhooks/instagram` | Meta | webhook check / new comments: check, hide, log, push |
+| `POST /cron/refresh-tokens` | daily job | extends Instagram tokens before they expire |
+| `POST /cron/poll-comments` | 30-second job | fetches new comments itself (see [Comment polling](#comment-polling)) |
+| `POST /billing/…`, `POST /webhooks/stripe` | app, Stripe | subscriptions (see [Stripe](#stripe) below) |
+
+For each comment, `pipeline.ts` skips paused, disconnected and over-the-limit accounts (the oldest
+accounts within the plan are moderated). It then takes the comment on once with `claim_comment()`,
+which spends a free check; repeat deliveries are free. Then it runs the classifier, hides the
+comment, logs it and sends the push. If something fails temporarily (OpenAI or Instagram down),
+the check is given back and the webhook returns an error, so Meta delivers the comment again.
+
+**Secrets** (`npx supabase secrets set`, never in the app):
+- `CONNECT_SECRET`, `CRON_SECRET`, `INSTAGRAM_WEBHOOK_VERIFY_TOKEN` are set. The verify token is
+  also in the Keychain (`supabase-toxoff-ig-verify-token`) for Meta's dashboard.
+- `ALLOW_EXPO_GO_RETURN=true` (development only) lets connect and billing return links use Expo
+  Go's `exp://` scheme. Leave it unset in production: the backend then redirects only to `toxoff://`.
+- `INSTAGRAM_POLLING=on` turns on [comment polling](#comment-polling).
+- `INSTAGRAM_APP_ID`, `INSTAGRAM_APP_SECRET`, `OPENAI_API_KEY`, `REVENUECAT_SECRET_KEY` and
+  `REVENUECAT_WEBHOOK_AUTH` are set. `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` are not (Stripe
+  is dormant). A route whose setting is missing answers 503.
+- `REVENUECAT_ALLOW_SANDBOX=true` lets sandbox purchases (TestFlight, sandbox testers, App Review)
+  unlock the plan they bought. See [App Store subscriptions](#app-store-subscriptions-revenuecat).
+- Optional: `META_APP_SECRET`, if webhook deliveries fail with "Invalid signature".
+
+**Deploy:** `npx supabase functions deploy api --use-api` (bundles on Supabase's servers, no Docker
+needed). `verify_jwt` is off in `config.toml` because Meta can't send a Supabase token; the app
+routes check the user's session themselves.
+
+**Scheduled jobs** (pg_cron, created by the migrations):
+- `refresh-instagram-tokens` runs daily at 04:00 UTC. It reads the function URL and `CRON_SECRET`
+  from Vault (`api_url`, `cron_secret`).
+- `prune-comment-claims` clears old claim records daily.
+- `poll-instagram-comments` fires every 30 seconds (same Vault secrets); each account is read when due, see below.
+
+### Comment polling
+Meta only sends `comments` webhooks to apps that are **Live** and have **Advanced Access** (App
+Review plus Business Verification). Until then, `poll.ts` fetches new comments itself, every 30
+seconds while an account has a post younger than 2 hours and every minute otherwise, while
+`INSTAGRAM_POLLING=on`:
+- For each account that is due it reads the newest 5 posts and their first 50 comments and
+  replies in ONE Instagram request (more pages only when a post needs them), newer
+  than the account's `comments_polled_at` cursor (with 2 minutes of overlap, and never more than
+  2 days back).
+- Each comment goes through the same pipeline as a webhook, so the same rules apply: one free
+  check, claims, hide, log, push, plan limits.
+- Comments already hidden, and the account's own comments, are skipped.
+- The cursor only moves when every comment was handled, so a temporary failure is read again
+  next time. Meta allows about 200 calls per account per hour; when it says "too many", the
+  account is left alone for 15 minutes (`poll_backoff_until`). `latest_post_at` drives the pace.
+- Because it never looks back further than the 7 days claims are kept, a restored comment isn't
+  hidden again.
+- It doesn't cover comments on older posts. Webhooks do, so switch polling off (or keep it as a
+  safety net) once Meta approves the app.
+
+**Tests:** `npm run test:functions` (needs Deno), or with Docker:
+`docker run --rm -v "$PWD":/app -w /app denoland/deno deno test --allow-env --config supabase/functions/api/deno.json supabase/functions/tests`.
+
+**Meta app** (needed before real accounts can connect):
+1. At developers.facebook.com, create a Business app with the Instagram use case.
+2. Instagram → API setup with Instagram login: put the Instagram app ID and secret in the secrets above.
+3. Business login settings → OAuth redirect URI:
+   `https://sjfmcieunormozrybqmi.supabase.co/functions/v1/api/connect/instagram/callback`
+4. Webhooks: set the callback URL to
+   `https://sjfmcieunormozrybqmi.supabase.co/functions/v1/api/webhooks/instagram`, use the
+   verify token from the Keychain, and subscribe to `comments`.
+5. App roles → Roles → Instagram testers: add your own Instagram professional account, then
+   accept the invite on instagram.com (Settings → Apps and websites → Tester invites). It can
+   connect straight away. Its comments are picked up by [comment polling](#comment-polling).
+6. Webhook deliveries of comments need the app to be **Live** (which needs a privacy-policy URL) and
+   **Advanced Access** for `instagram_business_manage_comments`, which needs App Review and
+   Business Verification. The Instagram account must also be public. Other creators can only
+   connect after App Review approves `instagram_business_basic` and
+   `instagram_business_manage_comments`.
+
+---
+
+## Billing (App Store)
+
+toxoff launches on the **App Store only**, so subscriptions are sold with **Apple's in-app
+purchase** (App Review rule 3.1.1), through **RevenueCat**. Tiers live in
+[`src/data/plans.ts`](src/data/plans.ts). Prices are set per country in App Store Connect, and the
+paywall shows Apple's price in the user's own currency. [`src/data/pricing.ts`](src/data/pricing.ts)
+only holds the USD list prices shown in Expo Go and demo mode.
+
+| Tier | Accounts | Limits | List price |
+|------|----------|--------|------------|
+| **Free** | 1 Instagram | 50 comment checks a month (+5 per invited friend, up to 3); 7-day log; no keyword blocklist or blocked users | free |
+| **Solo** | 1 Instagram | unlimited; keyword blocklist | $6.99/mo, $49.99/yr |
+| **Plus** | up to 5 Instagram | unlimited; keyword blocklist + blocked users | $12.99/mo, $99.99/yr |
+| **Studio** | up to 15 Instagram | as Plus, for managers and small agencies | $29.99/mo, $249.99/yr |
+
+The paywall uses compact plan choices centered on account limits and price, lists shared paid
+benefits once, and repeats the selected plan and billed amount beside the purchase button.
+Annual pricing leads with the full yearly charge; the monthly equivalent is secondary. Purchase
+controls move into the scroll area on small screens or at larger text sizes.
+
+Yearly is priced well under twelve months (save 40% on Solo, 36% on Plus, 31% on Studio): the
+discount sells annual on the paywall, and annual users can't churn for a year. Studio also anchors
+Plus as the sensible middle choice. For Pakistan and India set lower custom storefront prices in
+App Store Connect rather than lowering the global price.
+
+There is no trial. Every new account starts on **Free**, for good, unless they subscribe
+(migration `20260916100000_freemium_ads.sql`, constants in `src/data/plans.ts`):
+- **50 comment checks a month**, counted from the monthly anniversary of the day they joined
+  (`consume_comment_check()`, `profiles.free_comments_used` + `free_period_start`;
+  `free_period_start()` and `freePeriod()` agree on the month).
+- A **pool of extra checks** (`profiles.bonus_comment_checks`) that never resets, spent after the
+  month's allowance: **+5 per rewarded ad** watched, **up to 2 ads a day** (see Ads below), and
+  **+5 per invited friend** (below).
+- The **log reaches back 7 days** (`plan_limits.log_history_days`, enforced by the `moderation_log`
+  policy through `log_visible_since()`; rows are kept, and `moderation_counts()` still counts them
+  for Home). Paid plans see everything.
+- **Ads** on Home (`plan_limits.ads`). Paid plans show none.
+
+Once the checks are used, comments stop being checked until the month turns, an ad is watched, a
+friend joins, or the user subscribes. **Launch market: Pakistan.** Apple Pay isn't available
+there, but App Store purchases don't need it: Apple charges the card (or balance) on the user's
+Apple ID.
+
+**Invites** (`app/invite.tsx`, migration `20260914020000_invites.sql`):
+- Everyone has a single-use invite code: Settings → Invite friends, or the dashboard when the
+  free checks run out.
+- A new account (under 7 days old) can enter one friend's code. When that friend connects an
+  Instagram account that no toxoff user has connected before, both get **5 more free checks**
+  (`bonus_comment_checks`).
+- Each person can earn this for up to **3 friends** (15 extra). A friend who joins after that
+  still gets their 5.
+- Anti-abuse:
+  - `platform_accounts_seen` keeps a hash of every account ever connected, so re-linking one
+    from a second email earns nothing.
+  - Two people can't swap codes.
+  - All writes go through `invite_status()` / `redeem_invite_code()` and an `accounts` trigger;
+    the app can't write the tables.
+
+Limits live in `src/data/plans.ts` (app) and `supabase/migrations` (server) — keep them in
+sync. The database enforces them itself: `enforce_account_limit` blocks extra accounts, and
+the moderation backend takes each comment on with `claim_comment()`, which atomically spends
+one free check unless `is_paying()`. Paid-only rules use `effective_plan()`. When a plan lapses,
+the oldest accounts within the new limit keep being moderated.
+
+### App Store subscriptions (RevenueCat)
+
+RevenueCat checks Apple's receipts and is the source of truth. The app signs RevenueCat in with the
+toxoff user id (`src/lib/purchases.ts`), so every purchase belongs to that user. The backend
+(`supabase/functions/api/store.ts`) re-reads the user from RevenueCat's REST API and copies their
+subscription onto the profile (`billing_*` columns, `billing_store = 'app_store'`, via
+`apply_store_billing()`). It does this on every webhook, and right after a purchase or restore. The
+app only reads it, live.
+
+| Route | Does |
+|-------|------|
+| `POST /billing/app-store/sync` | the app, after a purchase or restore: re-read and copy |
+| `POST /webhooks/revenuecat` | any RevenueCat event: re-read every toxoff user it names (including both sides of a transfer) |
+
+How it behaves:
+- **Buying** on Free starts the plan now.
+- **Switching** between Solo, Plus and Studio, or monthly and annual, is another purchase in the
+  same subscription group. Apple upgrades right away and downgrades at the next renewal.
+- **Cancelling, changing the card and refunds** happen in Apple's own settings. The app's
+  "Manage subscription" opens them.
+- **Cancelled** (`unsubscribe_detected_at`): the plan stays on until the period ends.
+- **Billing problem**: during Apple's grace period the plan stays on as `past_due`, and Settings
+  says to update the payment method.
+- **Refunded or expired**: back to Free.
+- **Restore purchases** is on the paywall (required by the App Store).
+- In **Expo Go**, or without a RevenueCat key, purchases run in demo mode (a local pretend plan).
+
+**To set up** (with an Apple Developer account):
+1. App Store Connect:
+   - Create the app (`com.toxoff.app`) and sign the Paid Apps agreement (Business).
+   - Add a subscription group `toxoff` with six auto-renewable subscriptions:
+     `toxoff_solo_monthly`, `toxoff_solo_annual`, `toxoff_plus_monthly`, `toxoff_plus_annual`,
+     `toxoff_studio_monthly` and `toxoff_studio_annual`.
+   - Rank Studio above Plus above Solo in the group.
+   - Set prices (the list prices above), with custom storefront prices for Pakistan and India.
+2. App Store Connect → Users and Access → Integrations → In-App Purchase: create a key, for
+   RevenueCat.
+3. RevenueCat:
+   - Create a project and add the App Store app, with the bundle id and that key.
+   - Import the six products, and put them in the **current offering** as six packages (for
+     example `solo_monthly`). The app finds packages by product id.
+4. RevenueCat → Integrations → Webhooks:
+   - URL: `https://sjfmcieunormozrybqmi.supabase.co/functions/v1/api/webhooks/revenuecat`
+   - Authorization header: the value in the Keychain `supabase-toxoff-revenuecat-webhook-auth`
+     (already set on the server as `REVENUECAT_WEBHOOK_AUTH`).
+   - Production may receive both sandbox and production events. Sandbox receipts grant paid access
+     only when `REVENUECAT_ALLOW_SANDBOX=true`; production subscriptions take priority over
+     sandbox ones.
+5. Keys:
+   - RevenueCat's **Apple public key** (`appl_…`) goes in `.env` as `EXPO_PUBLIC_REVENUECAT_IOS_KEY`.
+   - Its **secret key** goes on the server:
+     `npx supabase secrets set REVENUECAT_SECRET_KEY=sk_…` (keep a copy in the Keychain as
+     `supabase-toxoff-revenuecat-secret`).
+6. Test with a development build (`eas build --profile development --platform ios`) and a
+   sandbox tester from App Store Connect. Expo Go can't make real purchases.
+   Sandbox entitlements need the server setting `REVENUECAT_ALLOW_SANDBOX=true`. It is on for the
+   hosted project (since 24 September 2026) because TestFlight and Apple's reviewers only ever buy
+   in sandbox; the trade-off is that a TestFlight tester can unlock a paid plan without paying.
+
+Security regressions run with `npm run test:security` (Deno, Node.js, and PostgreSQL binaries
+on `PATH`, or `PG_BIN` pointing at PostgreSQL's bin directory). The database tests create and
+stop a disposable local cluster; they do not use the linked Supabase project. See
+[`security-review-2026-09-16.md`](artifacts/security-review-2026-09-16.md) for findings and patches.
+
+### Stripe (not used by the iOS app)
+
+The iOS app doesn't use Stripe or Safepay: App Store rules require Apple's in-app purchase, so their
+app code was removed. The Stripe backend below is kept, tested and deployed, but switched off. It's
+there in case toxoff also sells on the web or Android later.
+
+
+Stripe is the source of truth. The backend (`supabase/functions/api/billing.ts`) copies the
+user's current subscription onto their profile (`billing_*` columns, via `apply_billing()`)
+after every action and on every webhook, always re-reading it from Stripe, so late or
+out-of-order webhooks can't leave an old state behind. The app only reads it, live, through
+Realtime.
+
+| Route | Does |
+|-------|------|
+| `POST /billing/subscribe` `{ planId, interval }` | new subscription → returns what the payment sheet needs; an existing one → switches price or takes a cancellation back |
+| `POST /billing/sync` | re-reads the subscription (the app calls it when the payment sheet closes) |
+| `POST /billing/cancel` | ends it after the paid period (right away if chosen during the trial) |
+| `POST /billing/portal` `{ returnUrl }` | Stripe's page for the card on file and invoices |
+| `GET /billing/return` | sends the browser from that page back to the app |
+| `POST /webhooks/stripe` | `customer.subscription.*` and `setup_intent.succeeded` |
+
+How it behaves:
+- **During the trial**, choosing a plan saves a card and sets the first charge for the moment
+  the trial ends; the Plus trial carries on until then and comments stop counting against the
+  free checks. If Stripe hasn't reported that first charge yet, the chosen plan holds for up
+  to 3 days instead of dropping to Free.
+- **After the trial**, the first period is paid in the payment sheet.
+- **Switching plans** charges or credits the difference right away. If the bank declines, the
+  plan stays as it was.
+- **A failed renewal** (`past_due`) keeps the plan on while Stripe retries, and Settings asks for a
+  new card. When the retries run out, the subscription ends and the user is on Free.
+- **Cancelling** keeps the plan until the end of the paid period; choosing it again takes the
+  cancellation back.
+- **One card per user**, kept on the Stripe customer. Renewals and the first charge after a
+  trial go to it, and Stripe's billing page changes it. (Stripe first keeps the card on the
+  subscription itself, where it would win over a card changed on that page, so `cardOnFile()`
+  moves it.)
+
+The Stripe API version is pinned in `stripe.ts` (`2025-03-31.basil`).
+
+**To set up** (with a Stripe account):
+1. Products → create Solo and Plus, each with a monthly and a yearly USD price. Give the prices
+   the lookup keys `toxoff_solo_monthly`, `toxoff_solo_annual`, `toxoff_plus_monthly` and
+   `toxoff_plus_annual`. The backend finds prices by these keys; the app never names a price.
+2. Developers → Webhooks → add the endpoint
+   `https://sjfmcieunormozrybqmi.supabase.co/functions/v1/api/webhooks/stripe` with the events
+   `customer.subscription.created`, `.updated`, `.deleted`, `.paused`, `.resumed` and
+   `setup_intent.succeeded`.
+3. Settings → Billing → Customer portal: allow updating the payment method and viewing invoices,
+   and save. Leave plan switching off: the app does that (and the portal would end a trial early).
+4. `npx supabase secrets set STRIPE_SECRET_KEY=sk_… STRIPE_WEBHOOK_SECRET=whsec_…`, and put
+   the publishable key in `.env` as `EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY`.
+5. Test with card `4242 4242 4242 4242` (any future date and CVC); `4000 0025 0000 3155`
+   asks for bank confirmation (3-D Secure).
+
+For the store build (can't be tried in Expo Go):
+- Apple Pay and Google Pay need a development build with the merchant ID (`app.json`), an Apple
+  Pay certificate in Stripe, and the `applePay` / `googlePay` options in `initPaymentSheet`
+  (recurring Apple Pay also wants a recurring cart item).
+- Banks that confirm payments on a web page need `urlScheme` on `StripeProvider` and `returnURL`
+  in `initPaymentSheet`, with the return link handled so the router doesn't open it as a screen.
+- A bank that asks to confirm every payment can't switch plans yet (the switch is refused rather
+  than left waiting). Stripe's `pending_if_incomplete` plus a confirmation step in the app would
+  fix that.
+
+
+---
+
+## Website (toxoff.app)
+
+`docs/` contains the older local website source: home, `privacy.html`, `terms.html`, `support.html`,
+`delete-account.html`, a 404 page, `style.css` and the icon files. The live toxoff.app redesign was
+the reference for the app's visual update; neither the live site nor these local website files
+were changed in that update. The legal texts also live as plain text in `legal/`; keep the two
+in step. The app links to these pages
+(`src/lib/links.ts`), and so should the Meta app dashboard, App Store Connect and the Google
+sign-in consent screen. It is hosted on GitHub Pages from a separate repo, with `docs/CNAME`
+naming the custom domain; DNS for the domain is at Namecheap.
+
+## Loading and offline states
+
+`ModerationContext.status` is `loading` until the first fetch of accounts, filters, log and
+profile completes, `ready` after, and `offline` if it failed (any error; usually no connection).
+Home shows a protection check while loading and a status-unavailable message with refresh when
+offline. Log and Settings show skeleton placeholders (`src/components/Skeleton.tsx`) while loading,
+and keep showing them under an `OfflineBanner` (with Retry, which calls `reload()`) if the load
+failed before anything arrived. Data that did arrive stays on screen through a failed retry.
+
+### Ads (AdMob, reported to RevenueCat Ads)
+
+**Off in version 1.** Everything in this section is behind `ADS_ENABLED` (`src/data/plans.ts`), which is
+true only when the build's environment has `EXPO_PUBLIC_ADS=on`. While it is off the app shows, asks
+and loads nothing to do with ads, and the plan lists, paywall, Settings and Home don't mention them.
+Turn it on once Google approves the AdMob account, and update the store listing as
+[`STORE_LISTING.md`](STORE_LISTING.md) describes.
+
+The Free plan shows ads; paid plans don't. Google AdMob serves them
+(`react-native-google-mobile-ads`, `src/lib/ads.ts`), and every load, impression, click, failure
+and paid event is sent to RevenueCat's ad tracker (`Purchases.adTracker`) so ad revenue shows next
+to subscriptions in RevenueCat. RevenueCat doesn't serve ads itself.
+
+- **Banner** (`src/components/AdSlot.tsx`): bottom of Home only (never beside the abusive text in the Log). Renders nothing for paying
+  users, in Expo Go, or when no ad filled.
+- **Rewarded ad** (`useRewardedAd`, Home's checks meter): "Watch an ad for +5 checks". The app
+  asks Google to include the toxoff user id in its **server-side verification** callback
+  (`GET /webhooks/admob-ssv`, `supabase/functions/api/ads.ts`), which checks Google's ECDSA
+  signature against `https://www.gstatic.com/admob/reward/verifier-keys.json` and calls
+  `grant_ad_reward()`: +5 to `bonus_comment_checks`, once per `transaction_id`, at most 2 a day,
+  never for paying users. The app is never trusted to say an ad was watched; it just waits for
+  the profile to update (realtime) and re-reads it as a fallback.
+- **Consent and tracking**: before the first ad, Google's consent form where required (EEA), then
+  Apple's tracking prompt (`expo-tracking-transparency`). Declining just means non-personalised
+  ads.
+- **Setup**: the AdMob app id goes in `app.json` (the `react-native-google-mobile-ads` plugin;
+  set on 16 September 2026), the two ad unit ids in `.env`
+  (`EXPO_PUBLIC_ADMOB_BANNER_UNIT`, `EXPO_PUBLIC_ADMOB_REWARDED_UNIT`; blank = Google's test units
+  in development builds). In AdMob: an iOS app, a banner unit and a rewarded unit with server-side
+  verification pointed at `https://<project>.supabase.co/functions/v1/api/webhooks/admob-ssv`, and
+  impression-level ad revenue turned on (RevenueCat needs it). Put Google's `app-ads.txt` line on
+  toxoff.app, and link the AdMob app to the App Store listing once it exists. In RevenueCat, turn
+  on Ads for the project. Needs the EAS development build, like purchases; nothing ad-related runs
+  in Expo Go.
+- **Tests**: `supabase/functions/tests/ads_test.ts` (signature verification),
+  `scripts/freemium.test.cjs` (`npm run test:db`: the monthly allowance, the bonus pool, reward
+  limits, the 7-day log window, privileges).
+
+## Onboarding
+
+After sign-up, `app/onboarding.tsx` has three steps:
+
+1. **Connect:** connect Instagram, or choose "Connect later." First setup saves the chosen
+   protection (by default Strict, with every flagged comment deleted) before opening Instagram,
+   because moderation can begin as soon as an account is connected.
+2. **Protection:** choose Gentle, Balanced, or Strict (the default) sensitivity, with an optional
+   spam toggle. The screen describes behavior without showing abusive example comments.
+3. **Ready:** review the account and settings, then finish on Home. Skipped connection is clearly
+   shown as not connected; it does not imply protection is running.
+
+`ModerationContext.applyOnboarding` saves the choices and `profiles.onboarded_at` records completion.
+Existing categories, keywords and preferences are retained unless changed; rerunning completed
+setup also preserves the saved handling mode. Keywords and categories remain in Filters. Log
+visibility, automatic erasure of deleted comments, and notification preferences remain under
+"Peace of mind" in Settings. Onboarding does not request notification permission or overwrite an
+existing push token. Unfinished setup is shown again at the next login.
+
+## Home and protection status
+
+Home leads with account coverage and the next action when accounts are disconnected, paused,
+outside the plan limit, out of free checks, or unavailable offline. "Status updated" is the last
+successful app refresh, not a claim about the last Instagram comment scan. A single activity
+summary switches between the last 24 hours, 7 days and 30 days. Recent activity shows actions and
+reasons without comment text; users open the Log to review comments according to their visibility preference.
+The checks meter (this month's checks, extra ones, the rewarded-ad offer) and a banner ad sit
+below protection and activity on the Free plan.
+
+## Password recovery
+
+"Forgot password?" opens `app/(auth)/forgot-password.tsx`. It requests a Supabase recovery email
+with the native callback `toxoff://reset-password`, provides a resend cooldown, and asks users to
+open the newest link in the same installed app that requested it (PKCE requires its stored verifier).
+The reset screen accepts a verified recovery session, checks the new password and confirmation,
+then asks the user to log in again. Invalid links offer a fresh request. An unfinished recovery
+session is kept out of the normal app flow, including after a restart.
+
+Local tests cover callback validation, recovery-session checks, startup gating and retryable
+verification errors: `node --test scripts/password-recovery.test.cjs scripts/auth-recovery.test.cjs`.
+Hosted email delivery and a real password change have **not** been verified in this design update.
+Before release, verify the callback in the hosted Supabase redirect allowlist, configure email
+delivery, and exercise the full flow in a native build that handles the `toxoff` URL scheme.
+
+## Push notifications
+
+When the backend hides a comment, it sends an Expo push to `profiles.push_token` if notifications
+are on. The push says who wrote the comment and why it was hidden, but leaves the comment text out
+on purpose. Settings requests permission and registers the token through `src/lib/notifications.ts`
+when the user enables alerts; onboarding and Home do not prompt automatically. Settings offers a
+push per comment, a daily summary at 9am Pakistan time (`POST /cron/daily-summary`), or none.
+Tokens use the EAS project id in `app.json` (`extra.eas.projectId`).
+
+---
+
+## Shipping to the App Store & Play Store
+
+Config for both stores is already in `app.json` (bundle id / package
+`com.toxoff.app`, New Architecture on) and `eas.json` (build + submit profiles).
+
+```bash
+npm i -g eas-cli
+eas login
+eas build:configure                 # creates/links the EAS project id
+
+# Production builds
+eas build --platform ios --profile production
+eas build --platform android --profile production
+
+# Submit
+eas submit --platform ios --profile production
+```
+
+`eas.json > submit.production` is filled in for iOS (App Store Connect app id, team id, API key
+id; the key file itself stays outside the repo). `sh scripts/build-ios.sh` runs the production
+build with the key passed as environment variables. Android has no submit profile yet.
+
+The store assets in `assets/` (icon, adaptive icon, splash, favicon,
+notification icon) are exported from `assets/toxoff-mascot-icon-1024.png` and the transparent
+`assets/mascot/toxoff-mascot.png` by `npm run gen:assets`. The icon preserves the original supplied
+artwork; the mascot holds a blank lavender speech bubble. After changing these files, regenerate
+the assets and rebuild native apps to update their installed launcher icons and launch screens.
+The app's colours
+(`src/theme/colors.ts`) now match the live toxoff.app: warm paper `#FAFBF7`, sage `#EDF5E9`, forest
+`#173F35` and lavender `#E4DDF5`. Bundled Manrope runs through `src/components/AppText.tsx`; see
+[`assets/fonts/README.md`](assets/fonts/README.md) for font sources and licensing. Native layouts
+keep 20pt gutters, 8pt button corners and 14pt card corners. New installs default to light mode;
+saved theme choices are retained, with the same palette adapted for dark mode.
+
+### Reviewer login and listing text
+
+App reviewers can't connect an Instagram account (until Meta's review, only tester accounts can),
+so they get a login that already has data: `appreview@toxoff.app`.
+
+- `node scripts/seed-reviewer.cjs` creates or resets it. The password is generated on first run
+  and kept in the macOS Keychain (`toxoff-reviewer-password`); it is never printed. Copy it with
+  `security find-generic-password -s toxoff-reviewer-password -w | pbcopy`.
+- `supabase/migrations/20260921100000_reviewer_demo.sql`: `profiles.reviewer` marks the login,
+  `accounts.demo` marks its sample Instagram account (no token, so never polled or refreshed), and
+  `seed_reviewer_demo(uid)` puts back 12 sample comments dated within the last six days. The
+  pg_cron job `refresh-reviewer-demo` runs it daily, so the samples stay inside Free's 7-day log.
+  Sample comments have no `comment_id`; real ones are never touched.
+- Restoring a hidden sample only updates the log (`supabase/functions/api/comments.ts`); there is
+  no comment on Instagram to un-hide.
+- [`STORE_LISTING.md`](STORE_LISTING.md) has the text for every App Store Connect field, the review
+  notes, the privacy-label answers and the screenshot list. The first release is iPhone-only
+  (`supportsTablet: false`): Apple allows adding iPad later but never removing it.
+
+> **Store review note:** Instagram API access and removing comments require
+> approved platform permissions and a public privacy policy. Have those ready before
+> review.
+
+---
+
+## Scripts
+
+| Command | What it does |
+|---------|--------------|
+| `npm start` | Start the Expo dev server |
+| `npm run ios` / `android` | Open on a simulator/emulator |
+| `npm run typecheck` | `tsc --noEmit` (strict mode) |
+| `npm run test:functions` | Backend unit tests (needs Deno) |
+| `npm run lint` | Expo lint |
+| `npm run gen:assets` | Export branded icon, splash, favicon, adaptive and notification PNGs |
