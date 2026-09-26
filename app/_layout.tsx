@@ -1,5 +1,6 @@
 import { Stack, useRouter, useSegments, useRootNavigationState } from 'expo-router';
 import { useFonts } from 'expo-font';
+import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
@@ -10,9 +11,31 @@ import { AuthProvider, useAuth } from '../src/context/AuthContext';
 import { ModerationProvider } from '../src/context/ModerationContext';
 import { ThemeProvider, useTheme } from '../src/theme/ThemeContext';
 
+// The launch screen (the mascot on the icon's green) stays up while the app starts, then fades
+// into the first real screen, so there is no spinner or colour jump in between.
+SplashScreen.preventAutoHideAsync().catch(() => {});
+SplashScreen.setOptions({ duration: 400, fade: true });
+// A slow network must never trap the user on the launch screen: after this the app's own
+// loading state shows instead.
+const LAUNCH_SCREEN_LIMIT_MS = 6000;
+
 function Navigator({ fontsPending }: { fontsPending: boolean }) {
   const { colors, isDark } = useTheme();
-  const { passwordRecovery, loading, user } = useAuth();
+  const { passwordRecovery, loading, user, onboarded, profileError } = useAuth();
+
+  // Ready once fonts are in and we know where the user goes: signed out, or the profile says
+  // whether onboarding is done (or failed, which shows its own Try again screen).
+  const firstScreenReady = !fontsPending && !loading && (!user || onboarded !== null || !!profileError);
+  useEffect(() => {
+    if (!firstScreenReady) return;
+    // One beat for the redirect's screen to draw before the fade uncovers it.
+    const beat = setTimeout(() => SplashScreen.hideAsync().catch(() => {}), 100);
+    return () => clearTimeout(beat);
+  }, [firstScreenReady]);
+  useEffect(() => {
+    const limit = setTimeout(() => SplashScreen.hideAsync().catch(() => {}), LAUNCH_SCREEN_LIMIT_MS);
+    return () => clearTimeout(limit);
+  }, []);
   const router = useRouter();
   const segments = useSegments();
   const navigation = useRootNavigationState();

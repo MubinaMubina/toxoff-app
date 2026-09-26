@@ -9,11 +9,6 @@
     "scheme": "toxoff",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
-    "splash": {
-      "image": "./assets/splash.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#13433B"
-    },
     "assetBundlePatterns": [
       "**/*"
     ],
@@ -45,6 +40,15 @@
     },
     "plugins": [
       "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/mascot/toxoff-mascot.png",
+          "imageWidth": 180,
+          "resizeMode": "contain",
+          "backgroundColor": "#13433B"
+        }
+      ],
       "expo-secure-store",
       [
         "expo-notifications",
