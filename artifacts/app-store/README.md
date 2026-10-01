@@ -2,6 +2,12 @@
 
 Captured 21 September 2026 from the native app on the iPhone 17 Pro Max simulator (iOS 26.3).
 
+**Retaken 1 October 2026 (01–05)** after the design pass: the shorter Home hero and Recent
+activity list, one-line Log rows, the iOS 26 toggles and the redesigned paywall. Taken in light
+mode from an Xcode 26 development build, signed in as the reviewer account, with the status bar
+set to 9:41. `05-paywall.png` now shows the App Store's own sandbox prices (StoreKit loads in
+this build). `06-welcome.png` is unchanged. Some descriptions in the table below predate this.
+
 Open `index.html` for the gallery. `toxoff-app-store-iphone-6.9.zip` contains only the six upload PNGs, in the order below. Each is **1320 × 2868**, portrait, 8-bit RGB, with no alpha channel. No iPad assets are included.
 
 | Order | File | Visible content |
