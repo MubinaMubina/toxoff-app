@@ -133,6 +133,20 @@ flowchart LR
 
 ## Try it
 
+> **For judges: what you can and can't try yourself**
+>
+> - **You can** run the whole app in the iOS Simulator in demo mode (steps below). Sign up or log
+>   in with any email and password and you get a demo account with a sample Instagram account
+>   and sample moderated comments: Home, the Log, Filters, Settings and the paywall all work.
+>   Purchases are simulated, and nothing is sent anywhere.
+> - **You can't** connect a real Instagram account. Until Meta's App Review and Business
+>   Verification are done, Meta only lets accounts added as testers on the developer's Meta app
+>   connect, and today those are the developer's own two accounts. A clone also contains none of
+>   the project's keys, so it can't reach the live backend.
+> - **The demo video shows the real thing:** an abusive comment deleted from a real Instagram
+>   account within a minute, and a real App Store sandbox purchase going through RevenueCat to the
+>   backend, on a TestFlight build on an iPhone.
+
 ### 1. Demo mode (no accounts or keys needed)
 
 With no `.env` file, the app runs entirely on sample data: sign up, onboarding, Home, Log,
@@ -141,8 +155,8 @@ Filters, Settings and the paywall all work, and nothing touches the network.
 You need Node.js 18 or later and, for iOS, a Mac with Xcode and the iOS Simulator.
 
 ```bash
-git clone <this repository>
-cd toxoff
+git clone https://github.com/MubinaMubina/toxoff-app.git
+cd toxoff-app
 npm install
 npx expo start
 ```
