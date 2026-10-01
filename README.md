@@ -17,9 +17,7 @@ keyword filters and English-only moderation miss.
 
 ## Why
 
-Instagram lets you hide comments with words from a list. That fails in two ways. Abuse in Roman
-Urdu has no fixed spelling, so word lists alone never keep up. And a filter that only hides still
-leaves the creator to scroll through the hidden folder, reading every insult to check nothing
+Instagram lets you hide comments with words from a list. That fails in two ways. Abuse in different languages has no fixed spelling, so word lists alone never keep up. And a filter that only hides still leaves the creator to scroll through the hidden folder, reading every insult to check nothing
 good was caught.
 
 toxoff detects and removes curse words and abuse **in any language and any format**: English or
