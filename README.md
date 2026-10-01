@@ -7,7 +7,7 @@ ones, usually before the creator ever reads them. It understands the languages S
 creators actually get abused in: Roman Urdu, Hindi, Punjabi and mixed English, which
 keyword filters and English-only moderation miss.
 
-> Built for **RevenueCat Shipaton 2026** (Next Gen Award). Demo video: _link added at submission_.
+> Built for **RevenueCat Shipaton 2026** (Next Gen Award). **[▶ Watch the demo video](https://youtube.com/shorts/xzV1aUa7RAY)**: real abuse deleted from a real Instagram account, and a subscription bought through RevenueCat, on an iPhone.
 
 | Home | Deleted, unread | Filters | Paywall |
 | --- | --- | --- | --- |
